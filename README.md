@@ -3,15 +3,16 @@
 > Índice de animes com **áudio ou legenda em português**, montado a partir do
 > feed público do [Nyaa](https://nyaa.si). PT-BR e PT-PT nunca se misturam.
 
-`versão 0.1.0` · `status: em desenvolvimento` · `coleta: ativa` · `hospedagem gratuita`
+`versão 0.1.0` · `status: site no ar` · `coleta: ativa` · `hospedagem gratuita`
 
 ## Acesso
 
 | Onde | Link |
 |---|---|
+| Site | <https://miaau-spike.miaau.workers.dev> |
 | Repositório | <https://github.com/GabrielDSousa/miaau> |
+| API (JSON) | <https://miaau-spike.miaau.workers.dev/api/stats> |
 | Diagnóstico da API | <https://miaau-spike.miaau.workers.dev/diag> |
-| Interface web | em desenvolvimento |
 
 > O endereço `*.workers.dev` pode não resolver em algumas redes (erro de TLS).
 > Se for o seu caso, o mesmo serviço funciona em outro domínio ou por VPN.
@@ -22,16 +23,15 @@
 |---|---|---|
 | Classificação por título | ✅ funcionando | precisão de 100% no golden set de 134 títulos |
 | Verificação pela descrição | ✅ funcionando | abre a página do torrent e confirma os idiomas |
-| Catálogo de metadados | ✅ funcionando | 76 torrents coletados, 34 verificados, 17 confirmados |
+| Catálogo de metadados | ✅ funcionando | catálogo incremental, com evidência e confiança por item |
+| Coleta agendada | ✅ funcionando | cron da Cloudflare a cada 10 min dispara o ciclo no GitHub Actions |
 | Coleta por disparo manual | ✅ funcionando | um ciclo completo leva ~15 s |
-| Coleta agendada | ⚠️ instável | o cron do GitHub Actions ainda não disparou; ciclos rodam por disparo manual |
-| Interface web | 🚧 em desenvolvimento | — |
-| Busca e filtros | 🚧 em desenvolvimento | — |
+| Interface web | ✅ funcionando | sem build, sem framework; uma requisição por página |
+| Busca e filtros | ✅ funcionando | abas PT-BR/PT-PT, dublado/legendado e busca por título ou grupo |
 | Histórico completo (backfill) | 🚧 planejado | hoje só a janela dos 75 itens do RSS |
 
-Números do catálogo atualizado em 15/11/2026: **17 confirmados** (15 legendados
-PT-BR e 2 com dublagem e legenda), **34 verificados** na página do torrent e
-**59 descartados** por não ter português.
+Primeira execução automática confirmada em 15/11/2026 às 22:10 UTC, sem
+intervenção manual.
 
 ## O que é o Miaau
 
@@ -61,7 +61,8 @@ conteúdo adulto.
 - verificação de candidatos na página de detalhe do torrent;
 - catálogo persistido, com atualização incremental e fila de verificação;
 - coleta executada em runner efêmero, sem estado local;
-- API de ingestão autenticada e idempotente.
+- API de ingestão autenticada e idempotente;
+- site público com abas PT-BR/PT-PT, filtro por dublado/legendado e busca.
 
 ## Ferramentas utilizadas
 

@@ -8,10 +8,6 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DatabaseSync } from "node:sqlite";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import {
   handleIngest,
@@ -19,66 +15,9 @@ import {
   isAuthorized,
   safeEqual,
   validatePayload,
-  type D1Like,
-  type D1StatementLike,
 } from "../ingest.ts";
 import { INGEST_MAX_ITEMS, INGEST_VERSION, type IngestItem, type IngestPayload } from "../../packages/core/src/protocol.ts";
-
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const SCHEMA = readFileSync(join(ROOT, "db", "schema.sql"), "utf8");
-
-/** Subconjunto de D1 que o handler usa, apoiado em `node:sqlite`. */
-class FakeStatement implements D1StatementLike {
-  private readonly db: DatabaseSync;
-  private readonly sql: string;
-  private readonly params: unknown[];
-
-  constructor(db: DatabaseSync, sql: string, params: unknown[] = []) {
-    this.db = db;
-    this.sql = sql;
-    this.params = params;
-  }
-
-  bind(...values: unknown[]): D1StatementLike {
-    return new FakeStatement(this.db, this.sql, values);
-  }
-
-  async run(): Promise<unknown> {
-    const res = this.db.prepare(this.sql).run(...(this.params as never[]));
-    return { changes: Number(res.changes) };
-  }
-
-  async all(): Promise<{ results?: unknown[] }> {
-    return { results: this.db.prepare(this.sql).all(...(this.params as never[])) };
-  }
-}
-
-class FakeD1 implements D1Like {
-  readonly db: DatabaseSync;
-
-  constructor() {
-    this.db = new DatabaseSync(":memory:");
-    this.db.exec(SCHEMA);
-  }
-
-  prepare(sql: string): D1StatementLike {
-    return new FakeStatement(this.db, sql);
-  }
-
-  async batch(statements: D1StatementLike[]): Promise<unknown[]> {
-    const out: unknown[] = [];
-    for (const s of statements) out.push(await s.run());
-    return out;
-  }
-
-  one<T>(sql: string, ...params: unknown[]): T {
-    return this.db.prepare(sql).get(...(params as never[])) as T;
-  }
-
-  close(): void {
-    this.db.close();
-  }
-}
+import { FakeD1 } from "./fake-d1.ts";
 
 const NOW = "2026-11-15T12:00:00.000Z";
 

@@ -29,6 +29,8 @@ import {
   type Env as IngestEnv,
 } from "./ingest.ts";
 import { dispatchCollection, type DispatchEnv } from "./dispatch.ts";
+import { catalogStats, listTorrents, parseListQuery, type QueryDb } from "./api.ts";
+import { APP_JS, PAGE_HTML, STYLE_CSS } from "./web.ts";
 
 interface Env extends IngestEnv, DispatchEnv {
   NYAA_BASE: string;
@@ -38,10 +40,30 @@ interface Env extends IngestEnv, DispatchEnv {
 /** Corpo máximo do `/ingest`. Um feed inteiro (~80 KB) cabe com folga. */
 const MAX_BODY_BYTES = 512 * 1024;
 
-const json = (data: unknown, status = 200): Response =>
+/** Cabeçalhos do HTML: nenhum script ou estilo inline, nenhum terceiro. */
+const HTML_HEADERS: Record<string, string> = {
+  "content-type": "text/html; charset=utf-8",
+  "cache-control": "public, max-age=60, must-revalidate",
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "no-referrer",
+  "content-security-policy":
+    "default-src 'none'; style-src 'self'; script-src 'self'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'",
+};
+
+function asset(body: string, contentType: string, maxAge = 300): Response {
+  return new Response(body, {
+    headers: {
+      "content-type": contentType,
+      "cache-control": `public, max-age=${maxAge}`,
+      "x-content-type-options": "nosniff",
+    },
+  });
+}
+
+const json = (data: unknown, status = 200, extra: Record<string, string> = {}): Response =>
   new Response(JSON.stringify(data, null, 2), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...extra },
   });
 
 function ua(env: Env): string {
@@ -74,21 +96,36 @@ export default {
     const route = url.pathname.replace(/\/+$/, "") || "/";
 
     try {
-      if (route === "/") {
+      if (route === "/" || route === "/index.html") {
+        return new Response(PAGE_HTML, { headers: HTML_HEADERS });
+      }
+
+      if (route === "/style.css") {
+        return asset(STYLE_CSS, "text/css; charset=utf-8");
+      }
+
+      if (route === "/app.js") {
+        return asset(APP_JS, "text/javascript; charset=utf-8");
+      }
+
+      if (route === "/api") {
         return json({
           service: "miaau",
-          routes: [
-            "/diag",
-            "/rss",
-            "/search?q=PT-BR",
-            "/detail?id=2132651",
-            "/burst?n=25",
-            "/probe",
-            "/d1",
-            "POST /ingest",
-            "GET /queue?limit=10",
-          ],
+          version: 1,
+          routes: ["/api/torrents?variant=br|pt&kind=all|dub|sub&q=&page=1", "/api/stats", "/diag"],
         });
+      }
+
+      if (route === "/api/stats") {
+        if (!env.DB) return json({ error: "binding DB ausente no wrangler.toml" }, 503);
+        return json(await catalogStats(env.DB as unknown as QueryDb));
+      }
+
+      if (route === "/api/torrents") {
+        if (!env.DB) return json({ error: "binding DB ausente no wrangler.toml" }, 503);
+        const query = parseListQuery(url);
+        const result = await listTorrents(env.DB as unknown as QueryDb, query);
+        return json(result, 200, { "cache-control": "public, max-age=120" });
       }
 
       // ------------------------------------------------ ponte de ingestão
