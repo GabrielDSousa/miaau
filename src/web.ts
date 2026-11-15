@@ -48,6 +48,16 @@ export const PAGE_HTML = `<!doctype html>
       <span class="sr">Buscar por título</span>
       <input id="q" type="search" placeholder="Buscar série, filme, grupo…" autocomplete="off" spellcheck="false">
     </label>
+
+    <label class="sort">
+      <span class="sr">Ordenar por</span>
+      <select id="sort">
+        <option value="recent">Mais recentes</option>
+        <option value="seeders">Mais seeders</option>
+        <option value="confidence">Mais confiança</option>
+        <option value="size">Maior tamanho</option>
+      </select>
+    </label>
   </section>
 
   <p id="status" class="status" role="status" aria-live="polite"></p>
@@ -147,6 +157,18 @@ button[aria-pressed="true"]:hover { color: #16180f; background: var(--accent); }
 .search input::placeholder { color: var(--ink-faint); }
 .search input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 
+.sort { flex: 0 0 auto; }
+.sort select {
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--ink-dim);
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.6rem;
+}
+.sort select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 
 .status { color: var(--ink-faint); font-size: 0.88rem; min-height: 1.4em; margin: 1rem 0 0; }
@@ -219,11 +241,12 @@ button[aria-pressed="true"]:hover { color: #16180f; background: var(--accent); }
 export const APP_JS = String.raw`(function () {
   "use strict";
 
-  var state = { variant: "br", kind: "all", q: "", page: 1, pages: 1 };
+  var state = { variant: "br", kind: "all", sort: "recent", q: "", page: 1, pages: 1 };
   var list = document.getElementById("list");
   var status = document.getElementById("status");
   var more = document.getElementById("more");
   var search = document.getElementById("q");
+  var sort = document.getElementById("sort");
   var seq = 0;
 
   function el(tag, cls, text) {
@@ -344,6 +367,7 @@ export const APP_JS = String.raw`(function () {
     var qs = new URLSearchParams();
     qs.set("variant", state.variant);
     qs.set("kind", state.kind);
+    qs.set("sort", state.sort);
     qs.set("page", String(page));
     if (state.q) qs.set("q", state.q);
     return qs.toString();
@@ -440,6 +464,12 @@ export const APP_JS = String.raw`(function () {
 
   more.addEventListener("click", function () {
     load(state.page + 1, true);
+  });
+
+  sort.addEventListener("change", function () {
+    state.sort = sort.value;
+    state.page = 1;
+    load(1, false);
   });
 
   stats();

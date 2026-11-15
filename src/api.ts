@@ -29,6 +29,7 @@ export interface TorrentListItem {
 export interface ListQuery {
   variant?: "br" | "pt";
   kind: "all" | "dub" | "sub";
+  sort: "recent" | "seeders" | "confidence" | "size";
   q: string;
   page: number;
   per: number;
@@ -59,9 +60,13 @@ const isVariant = (v: string | null): v is "br" | "pt" => v === "br" || v === "p
 const isKind = (v: string | null): v is "all" | "dub" | "sub" =>
   v === "all" || v === "dub" || v === "sub";
 
+const isSort = (v: string | null): v is ListQuery["sort"] =>
+  v === "recent" || v === "seeders" || v === "confidence" || v === "size";
+
 export function parseListQuery(url: URL): ListQuery {
   const rawVariant = url.searchParams.get("variant");
   const rawKind = url.searchParams.get("kind");
+  const rawSort = url.searchParams.get("sort");
   const rawPage = Number(url.searchParams.get("page") ?? 1);
   const rawPer = Number(url.searchParams.get("per") ?? DEFAULT_PER);
   const q = (url.searchParams.get("q") ?? "").trim().slice(0, MAX_Q);
@@ -69,6 +74,7 @@ export function parseListQuery(url: URL): ListQuery {
   return {
     variant: isVariant(rawVariant) ? rawVariant : undefined,
     kind: isKind(rawKind) ? rawKind : "all",
+    sort: isSort(rawSort) ? rawSort : "recent",
     q,
     page: Number.isFinite(rawPage) && rawPage >= 1 ? Math.min(Math.floor(rawPage), 1000) : 1,
     per: Number.isFinite(rawPer) && rawPer >= 1 ? Math.min(Math.floor(rawPer), MAX_PER) : DEFAULT_PER,
@@ -148,7 +154,7 @@ function parseEvidence(raw: unknown): string[] {
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((e): e is string => typeof e === "string").slice(0, 20);
+    return [...new Set(parsed.filter((e): e is string => typeof e === "string"))].slice(0, 20);
   } catch {
     return [];
   }
@@ -175,6 +181,13 @@ function toItem(row: Record<string, unknown>): TorrentListItem {
   };
 }
 
+const ORDER_BY: Record<ListQuery["sort"], string> = {
+  recent: "published_at DESC, id DESC",
+  seeders: "seeders DESC, published_at DESC, id DESC",
+  confidence: "confidence DESC, published_at DESC, id DESC",
+  size: "size_bytes DESC, published_at DESC, id DESC",
+};
+
 export async function listTorrents(db: QueryDb, query: ListQuery): Promise<ListResult> {
   const where = buildWhere(query);
   const offset = (query.page - 1) * query.per;
@@ -192,7 +205,7 @@ export async function listTorrents(db: QueryDb, query: ListQuery): Promise<ListR
               verified_at, description_langs, evidence
          FROM torrents
         WHERE ${where.sql}
-        ORDER BY published_at DESC, id DESC
+        ORDER BY ${ORDER_BY[query.sort]}
         LIMIT ? OFFSET ?`,
     )
     .bind(...where.params, query.per, offset)

@@ -114,7 +114,7 @@ export default {
           service: "miaau",
           version: 1,
           routes: [
-            "/api/torrents?variant=br|pt&kind=all|dub|sub&q=&page=1",
+            "/api/torrents?variant=br|pt&kind=all|dub|sub&sort=recent|seeders|confidence|size&q=&page=1",
             "/api/stats",
             "/feed.xml?variant=br|pt&kind=all|dub|sub",
             "/diag",

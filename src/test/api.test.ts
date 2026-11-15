@@ -25,6 +25,7 @@ interface Row {
   size?: number | null;
   langs?: string | null;
   evidence?: string;
+  confidence?: number;
 }
 
 const NOW = "2026-11-15T12:00:00.000Z";
@@ -56,7 +57,7 @@ function insert(db: FakeD1, row: Row): void {
       row.kind ?? "sub",
       row.variant ?? "br",
       row.status ?? "confirmed",
-      0.9,
+      row.confidence ?? 0.9,
       row.evidence ?? "[]",
       row.status === "rejected" ? null : NOW,
       row.langs ?? null,
@@ -82,16 +83,18 @@ async function withDb(fn: (db: FakeD1) => Promise<void>): Promise<void> {
 // ------------------------------------------------------------------ parsing
 
 test("parseListQuery aceita só valores conhecidos e limita a paginação", () => {
-  const q = parseListQuery(query({ variant: "br", kind: "dub", q: "  frieren  ", page: "2", per: "999" }));
+  const q = parseListQuery(query({ variant: "br", kind: "dub", sort: "seeders", q: "  frieren  ", page: "2", per: "999" }));
   assert.equal(q.variant, "br");
   assert.equal(q.kind, "dub");
+  assert.equal(q.sort, "seeders");
   assert.equal(q.q, "frieren");
   assert.equal(q.page, 2);
   assert.equal(q.per, 50, "per é limitado a 50");
 
-  const bad = parseListQuery(query({ variant: "xx", kind: "talvez", page: "-4", per: "0" }));
+  const bad = parseListQuery(query({ variant: "xx", kind: "talvez", sort: "aleatorio", page: "-4", per: "0" }));
   assert.equal(bad.variant, undefined);
   assert.equal(bad.kind, "all");
+  assert.equal(bad.sort, "recent");
   assert.equal(bad.page, 1);
   assert.equal(bad.per, 24);
 
@@ -203,6 +206,23 @@ test("ordem é do mais recente para o mais antigo, nulos por último", async () 
   });
 });
 
+test("ordenação por seeders, confiança e tamanho", async () => {
+  await withDb(async (db) => {
+    insert(db, { id: 43, seeders: 5, confidence: 0.9, size: 100 });
+    insert(db, { id: 44, seeders: 50, confidence: 0.7, size: 900 });
+    insert(db, { id: 45, seeders: 12, confidence: 0.95, size: 500 });
+
+    const bySeeders = await listTorrents(db, parseListQuery(query({ variant: "br", sort: "seeders" })));
+    assert.deepEqual(bySeeders.items.map((i) => i.id), [44, 45, 43]);
+
+    const byConfidence = await listTorrents(db, parseListQuery(query({ variant: "br", sort: "confidence" })));
+    assert.deepEqual(byConfidence.items.map((i) => i.id), [45, 43, 44]);
+
+    const bySize = await listTorrents(db, parseListQuery(query({ variant: "br", sort: "size" })));
+    assert.deepEqual(bySize.items.map((i) => i.id), [44, 45, 43]);
+  });
+});
+
 test("item devolve os campos que a interface usa", async () => {
   await withDb(async (db) => {
     insert(db, {
@@ -232,7 +252,7 @@ test("evidência válida chega como lista de textos", async () => {
   await withDb(async (db) => {
     insert(db, {
       id: 51,
-      evidence: JSON.stringify(['título: "pt-br"', 'grupo: "WF" → sub', 42]),
+      evidence: JSON.stringify(['título: "pt-br"', 'grupo: "WF" → sub', 42, 'título: "pt-br"']),
     });
 
     const res = await listTorrents(db, parseListQuery(query({ variant: "br" })));
