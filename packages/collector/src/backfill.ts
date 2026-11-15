@@ -80,8 +80,12 @@ export const BACKFILL_TERMS = [
  * vira "at" e devolve 1000 raws "AT-X TV"; `[BD_SUBS]` vira "bd" + "subs" e
  * devolve qualquer remux. Por isso a lista abaixo foi medida e conferida nos
  * títulos da primeira página — só entraram tags que de fato aparecem como tag
- * de grupo em releases com português. Ficaram de fora `AT`, `BD_SUBS`, `N A F`,
- * `adn`, `Puto` (raws alemães/BDMV) e `Fate4Anime` (BDRip sem PT no título).
+ * de grupo em releases com português. Ficaram de fora `AT`, `BD_SUBS`, `N A F`
+ * (casam palavra comum) e `Fate4Anime` (BDRip sem PT no título).
+ *
+ * `adn`, `RevA`, `NEXTfansub`, `FDP`, `DonCanjas` e `Anituga` são grupos de
+ * **PT-PT**, a aba mais fraca do catálogo: o título deles costuma dizer
+ * "SUBS PT-PT" ou "AUDIO JAP_-_SUBS PT-PT" e não "PT-BR".
  */
 export const BACKFILL_GROUPS = [
   "WF",
@@ -100,6 +104,14 @@ export const BACKFILL_GROUPS = [
   "Kekkan",
   "Trix",
   "Lelouch",
+  "Puto",
+  "adn",
+  "RevA",
+  "RevA-RDP",
+  "NEXTfansub",
+  "FDP",
+  "DonCanjas",
+  "Anituga",
 ];
 
 /** O Nyaa lista 75 por página e trava em 1000 resultados por busca. */
@@ -185,8 +197,10 @@ export async function runBackfill(opts: BackfillOptions): Promise<BackfillResult
 
   // Um `terms` explícito sem `groups` é uma execução focada: não mistura a
   // lista padrão de grupos, senão o teste (e o operador) perde o controle.
-  const terms = opts.terms?.length ? opts.terms : BACKFILL_TERMS;
-  const groups = opts.groups ?? (opts.terms?.length ? [] : BACKFILL_GROUPS);
+  // `terms: []` desliga a varredura por termo (usado para varrer só grupos).
+  const focused = opts.terms !== undefined && opts.terms.length > 0;
+  const terms = opts.terms ?? BACKFILL_TERMS;
+  const groups = opts.groups ?? (focused ? [] : BACKFILL_GROUPS);
 
   const result: BackfillResult = {
     ok: false,

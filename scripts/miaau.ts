@@ -305,7 +305,7 @@ async function backfill(fetcher: Fetcher): Promise<void> {
       .filter(Boolean);
   };
 
-  const terms = listFlag("terms");
+  const terms = has("no-terms") ? [] : listFlag("terms");
   // `--no-groups` desliga a varredura por tag; `--groups` troca a lista.
   const groups = has("no-groups") ? [] : listFlag("groups");
   const maxPagesRaw = Number(flag("pages") ?? 14);

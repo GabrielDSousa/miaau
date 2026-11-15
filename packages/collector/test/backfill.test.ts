@@ -354,12 +354,29 @@ test("BACKFILL_TERMS não inclui termos amplos e cobre as variantes medidas", ()
 });
 
 test("BACKFILL_GROUPS não repete tags e evita termos que casam palavra comum", () => {
-  assert.ok(BACKFILL_GROUPS.length >= 15);
+  assert.ok(BACKFILL_GROUPS.length >= 20);
   assert.ok(BACKFILL_GROUPS.includes("WF"));
   assert.ok(BACKFILL_GROUPS.includes("Anitsu"));
-  for (const noisy of ["AT", "BD_SUBS", "N A F", "adn", "Puto", "Fate4Anime"]) {
+  for (const ptpt of ["adn", "RevA", "NEXTfansub", "Anituga"]) {
+    assert.ok(BACKFILL_GROUPS.includes(ptpt), `${ptpt} é grupo de PT-PT`);
+  }
+  for (const noisy of ["AT", "BD_SUBS", "N A F", "Fate4Anime"]) {
     assert.ok(!BACKFILL_GROUPS.includes(noisy), `${noisy} casaria palavra comum no Nyaa`);
   }
   assert.ok(!BACKFILL_GROUPS.some((g) => g.startsWith("[")));
   assert.equal(new Set(BACKFILL_GROUPS).size, BACKFILL_GROUPS.length, "sem grupos repetidos");
+});
+
+test("terms vazio varre só os grupos padrão", async () => {
+  const fetcher = new FakeFetcher();
+  fetcher.add("[WF]", 1, page([row(90, "[WF] Anime - 01 [PT-BR]")], 1));
+
+  const remote = new FakeRemote();
+  const res = await runBackfill(
+    opts(fetcher, remote, { terms: [], groups: ["WF"] }) as Parameters<typeof runBackfill>[0],
+  );
+
+  assert.equal(res.terms.length, 1);
+  assert.equal(res.terms[0].kind, "group");
+  assert.equal(res.sent, 1);
 });
