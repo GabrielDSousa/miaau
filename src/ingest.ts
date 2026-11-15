@@ -439,7 +439,6 @@ export async function handleIngest(
     try {
       await db.batch(statements);
       written += slice.length;
-      queued += slice.filter((it) => it.needsVerification).length;
     } catch (batchError) {
       // Um item ruim não pode derrubar o lote inteiro (ex.: info_hash que já
       // pertence a outro id). Reexecuta item por item e registra o culpado.
@@ -460,7 +459,6 @@ export async function handleIngest(
                 ),
               )
               .run();
-            queued++;
           }
           written++;
         } catch (e) {
@@ -472,6 +470,19 @@ export async function handleIngest(
         }
       }
     }
+  }
+
+  // ---- quantos entraram na fila de verdade neste POST
+  // `ON CONFLICT DO NOTHING` não devolve contagem confiável por item, então
+  // contamos as linhas criadas com o carimbo deste lote.
+  try {
+    const inserted = (await db
+      .prepare("SELECT COUNT(*) AS n FROM verify_queue WHERE created_at = ?")
+      .bind(nowIso)
+      .all()) as { results?: Array<{ n: number }> };
+    queued = inserted.results?.[0]?.n ?? 0;
+  } catch {
+    // métrica acessória: não invalida o lote.
   }
 
   // ---- verificações
