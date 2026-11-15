@@ -12,6 +12,10 @@ on:
   schedule:
     # A cada 10 min. O GitHub aplica jitter de 5–20 min no cron, então o
     # intervalo real varia — o pipeline foi desenhado para isso.
+    #
+    # Atenção: o GitHub desativa cron de repositório sem atividade por 60 dias.
+    # Um push (ou um workflow_dispatch) reativa. Se o catálogo parar de crescer,
+    # o primeiro lugar para olhar é a aba Actions.
     - cron: "*/10 * * * *"
   workflow_dispatch:
     inputs:

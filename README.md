@@ -133,7 +133,9 @@ positivo, 0 variante trocada**.
 * feed de 75 itens em ~1,4 s de ingestão; ciclo completo em ~13 s com 10
   detalhes;
 * limite gratuito: 144 ciclos/dia × ~80 leituras ≈ 12 mil linhas/dia (teto D1:
-  5 milhões/dia), 1.400 requisições/dia (teto CF: 100 mil/dia).
+  5 milhões/dia), 1.400 requisições/dia (teto CF: 100 mil/dia);
+* cron do GitHub desativa após 60 dias sem atividade no repositório — um push
+  reativa (o primeiro indício é a aba Actions, não o banco).
 
 ## Ética de coleta
 
