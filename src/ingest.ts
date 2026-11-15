@@ -196,12 +196,18 @@ export function validatePayload(raw: unknown): ParsedPayload {
   const poll = validatePollState(body.pollState);
   errors.push(...poll.errors);
 
+  const ruleVersion = body.ruleVersion;
+  if (ruleVersion !== undefined && !isInt(ruleVersion, 1)) {
+    errors.push("ruleVersion inválido");
+  }
+
   return {
     payload: {
       version: INGEST_VERSION,
       items: items as IngestItem[],
       verifications: verifications as IngestVerification[],
       pollState: (body.pollState ?? undefined) as IngestPollState | undefined,
+      ruleVersion: ruleVersion as number | undefined,
     },
     errors,
   };
@@ -262,22 +268,32 @@ ON CONFLICT(id) DO UPDATE SET
   downloads = excluded.downloads,
   category_id = COALESCE(excluded.category_id, torrents.category_id),
   published_at = COALESCE(excluded.published_at, torrents.published_at),
-  last_seen_at = excluded.last_seen_at,
-  pt_kind = excluded.pt_kind,
-  pt_variant = excluded.pt_variant,
-  status = excluded.status,
-  confidence = excluded.confidence,
-  evidence = excluded.evidence,
-  needs_verification = excluded.needs_verification,
-  verified_at = COALESCE(excluded.verified_at, torrents.verified_at),
-  verify_version = COALESCE(excluded.verify_version, torrents.verify_version),
-  description_excerpt = COALESCE(excluded.description_excerpt, torrents.description_excerpt),
-  description_langs = COALESCE(excluded.description_langs, torrents.description_langs)
+  last_seen_at = excluded.last_seen_at
 WHERE excluded.last_seen_at >= torrents.last_seen_at`;
+
+/**
+ * Classificação vinda do título, aplicada **só quando a linha ainda não foi
+ * verificada com as regras atuais**.
+ *
+ * Sem essa guarda, o ciclo seguinte reescreveria `status = candidate` num item
+ * que a descrição já provou ser `both`/`confirmed` e o reenfileiraria para
+ * sempre — é o mesmo bug B17 do coletor local, agora do lado do D1.
+ */
+const CLASSIFY_TORRENT = `
+UPDATE torrents SET
+  pt_kind = ?, pt_variant = ?, status = ?, confidence = ?, evidence = ?,
+  needs_verification = ?
+WHERE id = ?
+  AND ? >= last_seen_at
+  AND (verified_at IS NULL OR COALESCE(verify_version, 0) < ?)`;
 
 const ENQUEUE = `
 INSERT INTO verify_queue (torrent_id, reason, priority, attempts, next_attempt_at, created_at)
-VALUES (?, ?, ?, 0, ?, ?)
+SELECT ?, ?, ?, 0, ?, ?
+WHERE NOT EXISTS (
+  SELECT 1 FROM torrents
+   WHERE id = ? AND verified_at IS NOT NULL AND COALESCE(verify_version, 0) >= ?
+)
 ON CONFLICT(torrent_id) DO NOTHING`;
 
 const APPLY_VERIFICATION = `
@@ -309,6 +325,27 @@ const DROP_DEAD_VERIFICATION = "DELETE FROM verify_queue WHERE torrent_id = ? AN
 const UPSERT_POLL_STATE = `
 INSERT INTO poll_state (key, value, updated_at) VALUES (?, ?, ?)
 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`;
+
+/**
+ * Reenfileira o que foi verificado com regras antigas.
+ *
+ * Só roda quando a versão do coletor muda: guardar a última versão vista em
+ * `poll_state` evita varrer a tabela em todo ciclo.
+ */
+const REENQUEUE_OUTDATED = `
+INSERT INTO verify_queue (torrent_id, reason, priority, attempts, next_attempt_at, created_at)
+SELECT id, 'recheck-regras', 0.5, 0, ?, ?
+  FROM torrents
+ WHERE hidden = 0
+   AND verified_at IS NOT NULL
+   AND COALESCE(verify_version, 0) < ?
+ON CONFLICT(torrent_id) DO NOTHING`;
+
+const MARK_OUTDATED = `
+UPDATE torrents SET needs_verification = 1
+ WHERE hidden = 0 AND verified_at IS NOT NULL AND COALESCE(verify_version, 0) < ?`;
+
+const RULES_VERSION_KEY = "rules:version";
 
 // ------------------------------------------------------------------ handlers
 
@@ -350,6 +387,24 @@ function itemParams(it: IngestItem): unknown[] {
   ];
 }
 
+function classifyParams(it: IngestItem, ruleVersion: number): unknown[] {
+  return [
+    it.ptKind,
+    it.ptVariant,
+    it.status,
+    it.confidence,
+    JSON.stringify(it.evidence ?? []),
+    it.needsVerification ? 1 : 0,
+    it.id,
+    it.lastSeenAt,
+    ruleVersion,
+  ];
+}
+
+function enqueueParams(id: number, reason: string, priority: number, nowIso: string, ruleVersion: number): unknown[] {
+  return [id, reason, priority, nowIso, nowIso, id, ruleVersion];
+}
+
 const BATCH = 100;
 
 export async function handleIngest(
@@ -362,41 +417,48 @@ export async function handleIngest(
   let skipped = 0;
   let queued = 0;
   let verificationsApplied = 0;
+  const ruleVersion = payload.ruleVersion ?? 1;
 
   // ---- itens, em lotes
   for (let start = 0; start < payload.items.length; start += BATCH) {
     const slice = payload.items.slice(start, start + BATCH);
     const statements: D1StatementLike[] = [];
-    const enqueueMeta: Array<{ id: number; reason: string; priority: number }> = [];
 
     for (const it of slice) {
       statements.push(db.prepare(UPSERT_TORRENT).bind(...itemParams(it)));
+      statements.push(db.prepare(CLASSIFY_TORRENT).bind(...classifyParams(it, ruleVersion)));
       if (it.needsVerification) {
-        enqueueMeta.push({
-          id: it.id,
-          reason: it.queueReason ?? "titulo",
-          priority: it.queuePriority ?? 0.5,
-        });
+        statements.push(
+          db
+            .prepare(ENQUEUE)
+            .bind(...enqueueParams(it.id, it.queueReason ?? "titulo", it.queuePriority ?? 0.5, nowIso, ruleVersion)),
+        );
       }
-    }
-    for (const e of enqueueMeta) {
-      statements.push(db.prepare(ENQUEUE).bind(e.id, e.reason, e.priority, nowIso, nowIso));
     }
 
     try {
       await db.batch(statements);
       written += slice.length;
-      queued += enqueueMeta.length;
+      queued += slice.filter((it) => it.needsVerification).length;
     } catch (batchError) {
       // Um item ruim não pode derrubar o lote inteiro (ex.: info_hash que já
       // pertence a outro id). Reexecuta item por item e registra o culpado.
       for (const it of slice) {
         try {
           await db.prepare(UPSERT_TORRENT).bind(...itemParams(it)).run();
+          await db.prepare(CLASSIFY_TORRENT).bind(...classifyParams(it, ruleVersion)).run();
           if (it.needsVerification) {
             await db
               .prepare(ENQUEUE)
-              .bind(it.id, it.queueReason ?? "titulo", it.queuePriority ?? 0.5, nowIso, nowIso)
+              .bind(
+                ...enqueueParams(
+                  it.id,
+                  it.queueReason ?? "titulo",
+                  it.queuePriority ?? 0.5,
+                  nowIso,
+                  ruleVersion,
+                ),
+              )
               .run();
             queued++;
           }
@@ -470,8 +532,29 @@ export async function handleIngest(
   };
 }
 
-export async function handleQueue(db: D1Like, limit: number, nowIso: string): Promise<QueueResponse> {
+export async function handleQueue(
+  db: D1Like,
+  limit: number,
+  nowIso: string,
+  ruleVersion?: number,
+): Promise<QueueResponse> {
   const capped = Math.max(1, Math.min(limit, 100));
+
+  if (ruleVersion !== undefined) {
+    // Uma leitura indexada por ciclo; o trabalho pesado só quando muda.
+    const seen = (await db
+      .prepare("SELECT value FROM poll_state WHERE key = ?")
+      .bind(RULES_VERSION_KEY)
+      .all()) as { results?: Array<{ value: string }> };
+    const lastSeen = seen.results?.[0]?.value;
+    if (lastSeen !== String(ruleVersion)) {
+      await db.batch([
+        db.prepare(REENQUEUE_OUTDATED).bind(nowIso, nowIso, ruleVersion),
+        db.prepare(MARK_OUTDATED).bind(ruleVersion),
+        db.prepare(UPSERT_POLL_STATE).bind(RULES_VERSION_KEY, String(ruleVersion), nowIso),
+      ]);
+    }
+  }
 
   const jobsResult = (await db
     .prepare(

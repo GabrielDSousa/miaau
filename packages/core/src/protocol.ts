@@ -88,6 +88,12 @@ export interface IngestPayload {
   items: IngestItem[];
   verifications?: IngestVerification[];
   pollState?: IngestPollState;
+  /**
+   * Versão das regras do coletor. Serve para **não desfazer** uma verificação
+   * nova com a classificação do título: se a linha foi verificada com esta
+   * versão ou mais nova, o `pt_kind`/`status` do lote é descartado.
+   */
+  ruleVersion?: number;
 }
 
 export interface IngestResponse {

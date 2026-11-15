@@ -47,7 +47,7 @@ export class RemoteError extends Error {
 }
 
 export interface Remote {
-  getQueue(limit: number): Promise<QueueResponse>;
+  getQueue(limit: number, ruleVersion?: number): Promise<QueueResponse>;
   postIngest(payload: IngestPayload): Promise<IngestResponse>;
 }
 
@@ -123,12 +123,10 @@ export function createRemote(opts: RemoteOptions): Remote {
   }
 
   return {
-    async getQueue(limit: number): Promise<QueueResponse> {
-      const res = await call<QueueResponse>(
-        `/queue?limit=${Math.max(1, Math.floor(limit))}`,
-        { method: "GET" },
-        "queue",
-      );
+    async getQueue(limit: number, ruleVersion?: number): Promise<QueueResponse> {
+      const qs = new URLSearchParams({ limit: String(Math.max(1, Math.floor(limit))) });
+      if (ruleVersion !== undefined) qs.set("ruleVersion", String(ruleVersion));
+      const res = await call<QueueResponse>(`/queue?${qs.toString()}`, { method: "GET" }, "queue");
       if (res.version !== INGEST_VERSION) {
         throw new RemoteError(`queue: versão ${res.version} != ${INGEST_VERSION}`, 200, false);
       }

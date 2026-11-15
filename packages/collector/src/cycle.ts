@@ -119,7 +119,7 @@ export async function runCycle(opts: CycleOptions): Promise<CycleResult> {
   let jobs: QueueJob[] = [];
   let previous: IngestPollState | null = null;
   try {
-    const queue = await remote.getQueue(queueLimit);
+    const queue = await remote.getQueue(queueLimit, opts.ruleVersion);
     jobs = queue.jobs;
     previous = queue.pollState;
     log(`fila: ${jobs.length} item(ns) para verificar`);
@@ -240,6 +240,9 @@ export async function runCycle(opts: CycleOptions): Promise<CycleResult> {
       // O estado só acompanha o primeiro lote: enviar de novo nos seguintes
       // sobrescreveria com o mesmo valor (inofensivo, mas redundante).
       pollState: i === 0 ? pollState : undefined,
+      // O Worker usa isso para não desfazer uma verificação feita com as
+      // regras atuais.
+      ruleVersion: opts.ruleVersion,
     };
 
     try {

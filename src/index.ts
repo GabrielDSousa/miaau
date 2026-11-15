@@ -107,7 +107,13 @@ export default {
           if (!Number.isFinite(limit) || limit < 1) {
             return json({ error: "?limit=<inteiro ≥ 1>" }, 400);
           }
-          const queue = await handleQueue(db, Math.floor(limit), nowIso);
+          const rules = Number(url.searchParams.get("ruleVersion") ?? "");
+          const queue = await handleQueue(
+            db,
+            Math.floor(limit),
+            nowIso,
+            Number.isFinite(rules) && rules >= 1 ? Math.floor(rules) : undefined,
+          );
           return json(queue);
         }
 

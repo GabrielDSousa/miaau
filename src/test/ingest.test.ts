@@ -122,7 +122,7 @@ function item(overrides: Partial<IngestItem> = {}): IngestItem {
 }
 
 function payload(items: IngestItem[], extra: Partial<IngestPayload> = {}): IngestPayload {
-  return { version: INGEST_VERSION, items, ...extra };
+  return { version: INGEST_VERSION, items, ruleVersion: 3, ...extra };
 }
 
 // ------------------------------------------------------------------ auth
@@ -398,6 +398,150 @@ test("um item ruim não derruba o lote inteiro", async () => {
     assert.equal(res.skipped, 1);
     assert.equal(res.errors[0]?.id, 5001);
     assert.ok(db.one<{ id: number }>("SELECT id FROM torrents WHERE id = 5000"));
+  } finally {
+    db.close();
+  }
+});
+
+test("verificação não é desfeita pelo ciclo seguinte", async () => {
+  const db = new FakeD1();
+  try {
+    const ambiguous = item({
+      id: 8000,
+      infoHash: "8".repeat(40),
+      ptKind: "unknown",
+      ptVariant: "unknown",
+      status: "candidate",
+      confidence: 0.5,
+      needsVerification: true,
+    });
+
+    await handleIngest(payload([ambiguous]), db, NOW);
+    await handleIngest(
+      payload([], {
+        verifications: [
+          {
+            torrentId: 8000,
+            ok: true,
+            ptKind: "both",
+            ptVariant: "br",
+            status: "confirmed",
+            confidence: 0.93,
+            evidence: ["desc:audio-pt"],
+            verifiedAt: NOW,
+            verifyVersion: 3,
+          },
+        ],
+      }),
+      db,
+      NOW,
+    );
+
+    // Ciclo seguinte: o título continua ambíguo, mas a linha está verificada.
+    await handleIngest(
+      payload([{ ...ambiguous, lastSeenAt: "2026-11-15T12:10:00.000Z" }]),
+      db,
+      "2026-11-15T12:10:00.000Z",
+    );
+
+    const row = db.one<Record<string, unknown>>("SELECT * FROM torrents WHERE id = 8000");
+    assert.equal(row.pt_kind, "both", "título não desfaz a verificação");
+    assert.equal(row.status, "confirmed");
+    assert.equal(row.needs_verification, 0);
+
+    const q = db.db.prepare("SELECT COUNT(*) AS n FROM verify_queue WHERE torrent_id = 8000").get() as {
+      n: number;
+    };
+    assert.equal(q.n, 0, "não volta para a fila para sempre");
+  } finally {
+    db.close();
+  }
+});
+
+test("regra nova reabre item verificado com versão antiga", async () => {
+  const db = new FakeD1();
+  try {
+    const ambiguous = item({
+      id: 8100,
+      infoHash: "9".repeat(40),
+      ptKind: "unknown",
+      ptVariant: "unknown",
+      status: "candidate",
+      confidence: 0.5,
+      needsVerification: true,
+    });
+
+    await handleIngest(payload([ambiguous]), db, NOW);
+    await handleIngest(
+      payload([], {
+        verifications: [
+          {
+            torrentId: 8100,
+            ok: true,
+            ptKind: "sub",
+            ptVariant: "pt",
+            status: "confirmed",
+            confidence: 0.9,
+            verifiedAt: NOW,
+            verifyVersion: 3,
+          },
+        ],
+      }),
+      db,
+      NOW,
+    );
+
+    // Coletor subiu para a versão 4: o item precisa ser reavaliado.
+    const rules = { ruleVersion: 4 };
+    const queue = await handleQueue(db, 10, NOW, 4);
+    assert.equal(queue.jobs.length, 1);
+    assert.equal(queue.jobs[0].torrentId, 8100);
+    assert.equal(queue.jobs[0].reason, "recheck-regras");
+
+    await handleIngest(payload([ambiguous], rules), db, NOW);
+    const row = db.one<Record<string, unknown>>("SELECT * FROM torrents WHERE id = 8100");
+    assert.equal(row.pt_kind, "unknown", "título volta a mandar quando as regras mudam");
+    assert.equal(row.needs_verification, 1);
+  } finally {
+    db.close();
+  }
+});
+
+test("reabertura por versão de regra acontece uma vez só", async () => {
+  const db = new FakeD1();
+  try {
+    await handleIngest(
+      payload([item({ id: 8200, infoHash: "a1".repeat(20), needsVerification: false })]),
+      db,
+      NOW,
+    );
+    await handleIngest(
+      payload([], {
+        verifications: [
+          {
+            torrentId: 8200,
+            ok: true,
+            ptKind: "sub",
+            ptVariant: "br",
+            status: "confirmed",
+            confidence: 0.9,
+            verifiedAt: NOW,
+            verifyVersion: 2,
+          },
+        ],
+      }),
+      db,
+      NOW,
+    );
+
+    const first = await handleQueue(db, 10, NOW, 3);
+    assert.equal(first.jobs.length, 1);
+    const second = await handleQueue(db, 10, NOW, 3);
+    assert.equal(second.jobs.length, 1, "ainda está na fila, mas não foi reenfileirado");
+    const q = db.db.prepare("SELECT COUNT(*) AS n FROM verify_queue WHERE torrent_id = 8200").get() as {
+      n: number;
+    };
+    assert.equal(q.n, 1, "sem duplicar a linha da fila");
   } finally {
     db.close();
   }
