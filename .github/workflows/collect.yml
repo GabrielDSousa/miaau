@@ -1,0 +1,51 @@
+name: collect
+
+# O Nyaa responde 429 para 100% do egress de Cloudflare Worker (medido na Fase
+# 0) e 200 para o do GitHub Actions com o mesmo User-Agent. Por isso o Worker
+# serve e o runner coleta.
+#
+# O runner é efêmero: ele pergunta ao Worker o que falta (`GET /queue`), busca o
+# RSS e as páginas de detalhe, e devolve tudo em `POST /ingest`. O D1 é a única
+# fonte da verdade entre ciclos.
+
+on:
+  schedule:
+    # A cada 10 min. O GitHub aplica jitter de 5–20 min no cron, então o
+    # intervalo real varia — o pipeline foi desenhado para isso.
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Quantas páginas de detalhe abrir neste ciclo"
+        required: false
+        default: "10"
+
+# Dois ciclos nunca devem se sobrepor: o segundo só faria requisição repetida.
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  cycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Sem `npm install`: o projeto não tem dependência de runtime.
+      - name: Ciclo de coleta
+        env:
+          MIAU_INGEST_URL: ${{ secrets.MIAU_INGEST_URL }}
+          MIAU_INGEST_TOKEN: ${{ secrets.MIAU_INGEST_TOKEN }}
+          # Combinado de coleta do projeto: contato identificável no UA.
+          MIAU_CONTACT: gabrielramos.email@gmail.com
+          NYAA_BASE: https://nyaa.si
+        run: node scripts/miaau.ts cycle --limit "${{ inputs.limit || 10 }}"

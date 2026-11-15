@@ -1,6 +1,7 @@
 /**
  * CLI do coletor.
  *
+ * Local (SQLite em `data/`):
  *   node scripts/miaau.ts poll                  # uma passada no RSS (1_0)
  *   node scripts/miaau.ts verify --limit 20     # abre N páginas de detalhe
  *   node scripts/miaau.ts stats                 # estado do catálogo
@@ -8,10 +9,15 @@
  *   node scripts/miaau.ts recheck               # re-verifica com regras novas
  *   node scripts/miaau.ts watch --interval 10   # loop de poll + verify
  *
+ * Na nuvem (sem estado, fala com o Worker):
+ *   node --env-file-if-exists=.env scripts/miaau.ts cycle --limit 10
+ *
  * Variáveis:
- *   MIAU_DB       caminho do SQLite   (padrão: data/miaau.db)
- *   MIAU_CONTACT  contato no UA       (padrão: gabrielramos.email@gmail.com)
- *   NYAA_BASE     base do Nyaa        (padrão: https://nyaa.si)
+ *   MIAU_DB            caminho do SQLite      (padrão: data/miaau.db)
+ *   MIAU_CONTACT       contato no UA          (padrão: gabrielramos.email@gmail.com)
+ *   NYAA_BASE          base do Nyaa           (padrão: https://nyaa.si)
+ *   MIAU_INGEST_URL    base do Worker         (só no `cycle`)
+ *   MIAU_INGEST_TOKEN  segredo compartilhado  (só no `cycle`)
  *
  * O coletor roda no GitHub Actions porque o Nyaa devolve 429 para IP de
  * Cloudflare Worker. Localmente (IP residencial) funciona igual.
@@ -22,8 +28,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createFetcher,
+  createRemote,
   miaauUserAgent,
   pollOnce,
+  runCycle,
   verifyBatch,
   Store,
   type Fetcher,
@@ -209,34 +217,93 @@ async function watch(store: Store, fetcher: Fetcher): Promise<void> {
   }
 }
 
-const store = openStore();
-const fetcher = makeFetcher();
+/**
+ * Ciclo sem estado para o GitHub Actions.
+ *
+ * Não abre SQLite: lê a fila do Worker, busca o feed, verifica o que está na
+ * fila e devolve tudo num POST. O `--limit` é quantos detalhes abrir.
+ */
+async function cycle(fetcher: Fetcher): Promise<void> {
+  const baseUrl = flag("url") ?? process.env.MIAU_INGEST_URL;
+  const token = process.env.MIAU_INGEST_TOKEN;
+  if (!baseUrl) {
+    console.error("cycle: defina MIAU_INGEST_URL (base do Worker)");
+    process.exitCode = 2;
+    return;
+  }
+  if (!token) {
+    // Só o nome da variável na mensagem: nunca o valor.
+    console.error("cycle: defina MIAU_INGEST_TOKEN (secret do repositório)");
+    process.exitCode = 2;
+    return;
+  }
+
+  const limit = Number(flag("limit") ?? 10);
+  const remote = createRemote({
+    baseUrl,
+    token,
+    warn: (m) => console.error(`  ! ${m}`),
+  });
+
+  const t0 = Date.now();
+  const r = await runCycle({
+    remote,
+    fetcher,
+    now: () => new Date(),
+    queueLimit: limit,
+    ruleVersion: RULE_VERSION,
+    log: (m) => console.log(`  ${m}`),
+  });
+
+  console.log(
+    `cycle  ${r.ok ? "ok" : "FALHOU"}  feed=${r.feedItems} escopo=${r.inScope} ` +
+      `enviado=${r.sent} gravado=${r.written} ignorado=${r.skipped} fila+=${r.queued}`,
+  );
+  console.log(
+    `       verificado=${r.verified} aplicado=${r.verificationsApplied} ` +
+      `só-título: confirmado=${r.byStatus.confirmed ?? 0} candidato=${r.byStatus.candidate ?? 0} ` +
+      `descartado=${r.byStatus.rejected ?? 0}`,
+  );
+  console.log(`       ingest ${r.ingestMs} ms   total ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+  if (r.gapDetected) console.error("  ! buraco no feed: backfill marcado no D1");
+  for (const e of r.errors.slice(0, 10)) console.error(`  ! ${e}`);
+  if (r.errors.length > 10) console.error(`  ! … mais ${r.errors.length - 10} erro(s)`);
+
+  if (!r.ok) process.exitCode = 1;
+}
+
+/** `cycle` não toca no SQLite local; o resto sim. */
+const NEEDS_STORE = cmd !== "cycle";
+const store = NEEDS_STORE ? openStore() : null;
 
 try {
   switch (cmd) {
     case "poll":
-      await poll(store, fetcher);
+      await poll(store!, fetcher);
       break;
     case "verify":
-      await verify(store, fetcher);
+      await verify(store!, fetcher);
       break;
     case "watch":
-      await watch(store, fetcher);
+      await watch(store!, fetcher);
+      break;
+    case "cycle":
+      await cycle(fetcher);
       break;
     case "recheck":
-      recheck(store);
+      recheck(store!);
       break;
     case "stats":
-      stats(store);
+      stats(store!);
       break;
     case "rules":
-      rules(store);
+      rules(store!);
       break;
     default:
       console.error(`comando desconhecido: ${cmd}`);
-      console.error("use: poll | verify | watch | recheck | stats | rules");
+      console.error("use: poll | verify | watch | cycle | recheck | stats | rules");
       process.exitCode = 2;
   }
 } finally {
-  store.close();
+  store?.close();
 }

@@ -1,28 +1,41 @@
 /**
- * Worker do spike (Fase 0).
+ * Worker do Miaau.
  *
- * Objetivo único: medir, de dentro da Cloudflare, se o Nyaa é alcançável e
- * quanto custa cada tipo de requisição. Não é o produto — é o experimento que
- * decide se o produto pode morar aqui.
+ * Duas responsabilidades:
+ *   * **spike** (Fase 0) — diagnóstico de alcance do Nyaa de dentro da
+ *     Cloudflare. Fica, mas é secundário;
+ *   * **ponte de ingestão** (Fase 1) — o D1 é a fonte da verdade e o coletor
+ *     roda no GitHub Actions, que é efêmero:
  *
- * Rotas:
+ *       POST /ingest        ← lote classificado (Bearer)
+ *       GET  /queue?limit=N → itens que precisam ser abertos (Bearer)
+ *
+ * Rotas do spike:
  *   GET /diag              → ambiente + relógio
  *   GET /rss               → feed 1_0: status, bytes, itens, ms
  *   GET /search?q=&p=      → página HTML de busca: status, bytes, total de resultados
  *   GET /detail?id=        → página de detalhe: classificação da descrição
  *   GET /burst?n=25        → n requisições sequenciais ao RSS: status e latência
  *   GET /d1                → sanidade do D1 (se o binding existir)
- *
- * Tudo devolve JSON, com `ms` medido no Worker.
  */
 
 import { parseRss, parseDetailPage, parseDescription, classifyTitle, applyDescription } from "../packages/core/src/index.ts";
+import {
+  handleIngest,
+  handleQueue,
+  isAuthorized,
+  validatePayload,
+  type D1Like,
+  type Env as IngestEnv,
+} from "./ingest.ts";
 
-interface Env {
+interface Env extends IngestEnv {
   NYAA_BASE: string;
   MIAU_CONTACT: string;
-  DB?: D1Database;
 }
+
+/** Corpo máximo do `/ingest`. Um feed inteiro (~80 KB) cabe com folga. */
+const MAX_BODY_BYTES = 512 * 1024;
 
 const json = (data: unknown, status = 200): Response =>
   new Response(JSON.stringify(data, null, 2), {
@@ -62,9 +75,69 @@ export default {
     try {
       if (route === "/") {
         return json({
-          service: "miaau-spike",
-          routes: ["/diag", "/rss", "/search?q=PT-BR", "/detail?id=2132651", "/burst?n=25", "/probe", "/d1"],
+          service: "miaau",
+          routes: [
+            "/diag",
+            "/rss",
+            "/search?q=PT-BR",
+            "/detail?id=2132651",
+            "/burst?n=25",
+            "/probe",
+            "/d1",
+            "POST /ingest",
+            "GET /queue?limit=10",
+          ],
         });
+      }
+
+      // ------------------------------------------------ ponte de ingestão
+      // Autenticação primeiro: rota inexistente e rota sem token respondem
+      // diferente, então o 401 vem antes de qualquer trabalho.
+      if (route === "/ingest" || route === "/queue") {
+        if (!isAuthorized(request.headers.get("authorization"), env.INGEST_TOKEN)) {
+          return json({ error: "não autorizado" }, 401);
+        }
+        if (!env.DB) return json({ error: "binding DB ausente no wrangler.toml" }, 503);
+        const db = env.DB as D1Like;
+        const nowIso = new Date().toISOString();
+
+        if (route === "/queue") {
+          if (request.method !== "GET") return json({ error: "use GET" }, 405);
+          const limit = Number(url.searchParams.get("limit") ?? 10);
+          if (!Number.isFinite(limit) || limit < 1) {
+            return json({ error: "?limit=<inteiro ≥ 1>" }, 400);
+          }
+          const queue = await handleQueue(db, Math.floor(limit), nowIso);
+          return json(queue);
+        }
+
+        if (request.method !== "POST") return json({ error: "use POST" }, 405);
+
+        const declared = Number(request.headers.get("content-length") ?? 0);
+        if (declared > MAX_BODY_BYTES) {
+          return json({ error: `corpo acima de ${MAX_BODY_BYTES} bytes` }, 413);
+        }
+        const body = await request.text();
+        if (body.length > MAX_BODY_BYTES) {
+          return json({ error: `corpo acima de ${MAX_BODY_BYTES} bytes` }, 413);
+        }
+
+        let raw: unknown;
+        try {
+          raw = JSON.parse(body);
+        } catch {
+          return json({ error: "corpo não é JSON" }, 400);
+        }
+
+        const { payload, errors } = validatePayload(raw);
+        if (errors.length) {
+          // 400 e não 200: o coletor precisa saber que o lote foi recusado.
+          return json({ error: "payload inválido", details: errors.slice(0, 20) }, 400);
+        }
+
+        const response = await handleIngest(payload, db, nowIso);
+        // 207 quando parte do lote falhou: o coletor loga e segue.
+        return json(response, response.skipped > 0 || response.errors.length > 0 ? 207 : 200);
       }
 
       if (route === "/diag") {
@@ -231,19 +304,21 @@ export default {
 
       if (route === "/d1") {
         if (!env.DB) return json({ error: "binding DB ausente no wrangler.toml" }, 503);
+        // O /d1 é diagnóstico e usa `first()`, fora do subconjunto D1Like.
+        const db = env.DB as unknown as D1Database;
         const { ms, value } = await timed(async () => {
-          const one = await env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
-          const tables = await env.DB.prepare(
+          const one = await db.prepare("SELECT 1 AS ok").first<{ ok: number }>();
+          const tables = await db.prepare(
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
           ).all<{ name: string }>();
           let write: unknown = null;
           if (url.searchParams.get("write")) {
             const w0 = Date.now();
-            await env.DB.prepare(
+            await db.prepare(
               "INSERT INTO poll_state (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
             ).bind("probe", JSON.stringify({ lastSeenId: 2132651 }), new Date().toISOString()).run();
-            const row = await env.DB.prepare("SELECT * FROM poll_state WHERE key='probe'").first();
-            await env.DB.prepare("DELETE FROM poll_state WHERE key='probe'").run();
+            const row = await db.prepare("SELECT * FROM poll_state WHERE key='probe'").first();
+            await db.prepare("DELETE FROM poll_state WHERE key='probe'").run();
             write = { ms: Date.now() - w0, row };
           }
           return { one, tables: tables.results?.map((t) => t.name) ?? [], write };

@@ -8,7 +8,7 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "test": "node --test packages/core/test/*.test.ts packages/collector/test/*.test.ts scripts/test/*.test.mjs",
+    "test": "node --test packages/core/test/*.test.ts packages/collector/test/*.test.ts src/test/*.test.ts scripts/test/*.test.mjs",
     "check:secrets": "node scripts/scan-secrets.mjs",
     "collect": "node scripts/collect-corpus.mjs",
     "report": "node scripts/report.ts",
@@ -20,6 +20,7 @@
     "dev": "wrangler dev",
     "tail": "wrangler tail",
     "miaau": "node scripts/miaau.ts",
+    "cycle": "node --env-file-if-exists=.env scripts/miaau.ts cycle",
     "poll": "node scripts/miaau.ts poll",
     "verify": "node scripts/miaau.ts verify",
     "stats": "node scripts/miaau.ts stats",

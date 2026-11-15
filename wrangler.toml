@@ -1,11 +1,19 @@
-# Spike da Fase 0: valida se o Worker alcança o Nyaa e quanto custa.
+# Miaau — Worker da Cloudflare + D1.
+#
+# O Worker serve o site e recebe os lotes do coletor:
+#   POST /ingest        ← lote classificado (Bearer INGEST_TOKEN)
+#   GET  /queue?limit=N → itens que precisam ser abertos (Bearer INGEST_TOKEN)
+#
+# O coletor roda no GitHub Actions: o Nyaa devolve 429 para 100% do egress de
+# Worker (medido na Fase 0) e 200 para o do Actions.
 #
 # Depois do login (`npx wrangler login`):
+#   npx wrangler d1 execute miaau --remote --file=db/schema.sql
+#   npx wrangler secret put INGEST_TOKEN    # mesmo valor do secret do GitHub
 #   npx wrangler deploy
-#   curl https://miaau-spike.<subdominio>.workers.dev/diag
 #
-# D1 só entra quando houver banco criado (`npx wrangler d1 create miaau`):
-# descomente o bloco [[d1_databases]] e cole o database_id devolvido.
+# O INGEST_TOKEN nunca mora neste arquivo: é secret do Worker, secret do
+# repositório no GitHub e `.env` local (ignorado pelo git).
 
 name = "miaau-spike"
 main = "src/index.ts"
