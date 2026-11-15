@@ -274,6 +274,7 @@ async function cycle(fetcher: Fetcher): Promise<void> {
 
 /** `cycle` não toca no SQLite local; o resto sim. */
 const NEEDS_STORE = cmd !== "cycle";
+const fetcher = makeFetcher();
 const store = NEEDS_STORE ? openStore() : null;
 
 try {
