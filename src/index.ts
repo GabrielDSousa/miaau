@@ -28,8 +28,9 @@ import {
   type D1Like,
   type Env as IngestEnv,
 } from "./ingest.ts";
+import { dispatchCollection, type DispatchEnv } from "./dispatch.ts";
 
-interface Env extends IngestEnv {
+interface Env extends IngestEnv, DispatchEnv {
   NYAA_BASE: string;
   MIAU_CONTACT: string;
 }
@@ -338,6 +339,32 @@ export default {
         { error: (e as Error).message, name: (e as Error).name, stack: (e as Error).stack?.slice(0, 800) },
         url.searchParams.get("debug") ? 200 : 502,
       );
+    }
+  },
+
+  /**
+   * Cron da Cloudflare (a cada 10 minutos, no `wrangler.toml`).
+   *
+   * O agendador do GitHub Actions não disparou nenhuma vez neste repositório
+   * (0 execuções de `schedule` em 1 h, workflow `active`, YAML válido). O cron
+   * do Worker é pontual e só faz uma chamada à API do GitHub pedindo o
+   * `workflow_dispatch` do `collect.yml`.
+   *
+   * Não lança: cron não tem cliente para receber erro, e um ciclo perdido é
+   * recuperado no próximo — o D1 é a fonte da verdade.
+   */
+  async scheduled(controller: { cron?: string }, env: Env): Promise<void> {
+    const t0 = Date.now();
+    const res = await dispatchCollection(env, { warn: (m) => console.warn(m) });
+    const line = { ...res, ms: Date.now() - t0, cron: controller.cron ?? null };
+
+    if (res.ok) {
+      console.log("dispatch", JSON.stringify(line));
+    } else if (!res.configured) {
+      // Configuração pendente não é falha de operação: avisa uma vez por ciclo.
+      console.warn("dispatch", JSON.stringify(line));
+    } else {
+      console.error("dispatch", JSON.stringify(line));
     }
   },
 } satisfies ExportedHandler<Env>;

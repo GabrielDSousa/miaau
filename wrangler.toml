@@ -9,7 +9,8 @@
 #
 # Depois do login (`npx wrangler login`):
 #   npx wrangler d1 execute miaau --remote --file=db/schema.sql
-#   npx wrangler secret put INGEST_TOKEN    # mesmo valor do secret do GitHub
+#   npx wrangler secret put INGEST_TOKEN            # mesmo valor do secret do GitHub
+#   npx wrangler secret put GITHUB_DISPATCH_TOKEN   # fine-grained, Actions: write
 #   npx wrangler deploy
 #
 # O INGEST_TOKEN nunca mora neste arquivo: é secret do Worker, secret do
@@ -27,6 +28,17 @@ enabled = true
 [vars]
 NYAA_BASE = "https://nyaa.si"
 MIAU_CONTACT = "gabrielramos.email@gmail.com"
+# Repositório que roda a coleta. O token de dispatch é secret, não var.
+GITHUB_REPO = "GabrielDSousa/miaau"
+GITHUB_WORKFLOW = "collect.yml"
+GITHUB_REF = "main"
+
+# O agendador do GitHub Actions não disparou neste repositório, então quem
+# acorda a coleta é o cron da Cloudflare: a cada 10 min o Worker faz uma única
+# chamada à API do GitHub (workflow_dispatch). O Worker continua sem tocar no
+# Nyaa — quem coleta é o runner, que recebe 200 em vez de 429.
+[triggers]
+crons = ["*/10 * * * *"]
 
 [[d1_databases]]
 binding = "DB"
