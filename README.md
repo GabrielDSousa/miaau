@@ -38,12 +38,12 @@
 | Indexação | ✅ básico | `robots.txt` e `sitemap.xml` com as páginas públicas |
 | Cache de borda | ✅ funcionando | leituras públicas guardadas no Cache API, com TTL curto |
 | Feed RSS | ✅ funcionando | 50 itens mais recentes, por variante e tipo |
-| Histórico (backfill) | ✅ ampliado | 16 termos + 16 grupos de fansub; termos que batem no teto de 1.000 são varridos nas duas direções; não é o arquivo completo |
+| Histórico (backfill) | ✅ ampliado | 24 termos + 16 grupos de fansub; termos que batem no teto de 1.000 são varridos nas duas direções; não é o arquivo completo |
 
 Primeira execução automática confirmada em 15/11/2026 às 22:10 UTC, sem
 intervenção manual. Em 15/11/2026, depois do backfill ampliado, o catálogo tinha
-**5.700 torrents**, sendo **1.367 confirmados** com português — 1.256 na aba
-PT-BR e 116 na PT-PT — em **892 séries**. Os candidatos restantes entram na fila
+**6.196 torrents**, sendo **1.483 confirmados** com português — 1.371 na aba
+PT-BR e 117 na PT-PT — em **942 séries**. Os candidatos restantes entram na fila
 de verificação aos poucos.
 
 ## O que é o Miaau

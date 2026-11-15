@@ -39,10 +39,17 @@ import type { Remote } from "./remote.ts";
  * milhares de releases sem português e transformariam o backfill num trabalho
  * de verificação de dias. Os termos em português abaixo foram medidos no Nyaa
  * (cada um devolve entre 1 e 109 itens em `1_0`), então custam poucas páginas.
+ *
+ * A busca do Nyaa casa **tokens**, não a frase: `PT-BR` vira "pt" + "br" e
+ * `Sub PT` vira "sub" + "pt". Por isso termos de duas palavras não são
+ * redundantes — eles exigem a combinação e trazem releases que o termo isolado
+ * não alcança (por exemplo, título com "Sub PT-BR" e sem "Legendado").
+ * `Legenda` ficou de fora porque casa o prefixo de "Legendary"; `Legendas` não.
  */
 export const BACKFILL_TERMS = [
   "PT-BR",
   "PTBR",
+  "PT",
   "Português",
   "Portuguese",
   "Dublado",
@@ -55,8 +62,15 @@ export const BACKFILL_TERMS = [
   "Dublagem",
   "Áudio PT",
   "Dual Áudio",
+  "Multi Áudio",
   "Brazilian Portuguese",
   "Português Brasileiro",
+  "Português BR",
+  "Sub PT",
+  "Subs PT",
+  "Dub PT",
+  "Legenda PT",
+  "Legendas",
 ];
 
 /**

@@ -340,13 +340,16 @@ test("orçamento de requisições interrompe a varredura sem perder o que já en
 });
 
 test("BACKFILL_TERMS não inclui termos amplos e cobre as variantes medidas", () => {
-  assert.ok(BACKFILL_TERMS.length <= 20);
+  assert.ok(BACKFILL_TERMS.length <= 30);
   assert.ok(BACKFILL_TERMS.includes("PT-BR"));
+  assert.ok(BACKFILL_TERMS.includes("PT"));
   assert.ok(BACKFILL_TERMS.includes("PT-PT"));
   assert.ok(BACKFILL_TERMS.includes("Dublado"));
   assert.ok(BACKFILL_TERMS.includes("Brazilian Portuguese"));
+  assert.ok(BACKFILL_TERMS.includes("Sub PT"));
   assert.ok(!BACKFILL_TERMS.includes("Multi-Sub"));
   assert.ok(!BACKFILL_TERMS.includes("Dual Audio"));
+  assert.ok(!BACKFILL_TERMS.includes("Legenda"), "casa o prefixo de 'Legendary'");
   assert.equal(new Set(BACKFILL_TERMS).size, BACKFILL_TERMS.length, "sem termos repetidos");
 });
 

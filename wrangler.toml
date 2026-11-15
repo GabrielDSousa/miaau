@@ -32,9 +32,10 @@ MIAU_CONTACT = "gabrielramos.email@gmail.com"
 GITHUB_REPO = "GabrielDSousa/miaau"
 GITHUB_WORKFLOW = "collect.yml"
 GITHUB_REF = "main"
-# Detalhes abertos por ciclo disparado pelo cron. O backfill encheu a fila de
-# verificação; 25 drena ~3.600/dia sem passar de ~30 s por execução.
-GITHUB_LIMIT = "25"
+# Detalhes abertos por ciclo disparado pelo cron. O backfill ampliado deixou
+# ~3.200 candidatos na fila; 40 por ciclo (~5.800/dia) drena em ~14 h sem passar
+# de ~1 min por execução.
+GITHUB_LIMIT = "40"
 # Cron do ciclo incremental. O outro cron configurado abaixo dispara o backfill.
 GITHUB_CRON = "*/10 * * * *"
 
