@@ -28,7 +28,7 @@
 | Catálogo de metadados | ✅ funcionando | catálogo incremental, com evidência e confiança por item |
 | Coleta agendada | ✅ funcionando | cron da Cloudflare a cada 10 min dispara o ciclo no GitHub Actions |
 | Backfill periódico | ✅ funcionando | cron diário (06:17 UTC) revarre termos e grupos de fansub |
-| Coleta por disparo manual | ✅ funcionando | um ciclo completo leva ~15 s |
+| Coleta por disparo manual | ✅ funcionando | um ciclo leva ~1 min com 40 páginas de detalhe |
 | Interface web | ✅ funcionando | sem build, sem framework; uma requisição por página |
 | Como funciona | ✅ funcionando | fontes, classificação, limites e canal de correção |
 | Busca e filtros | ✅ funcionando | abas PT-BR/PT-PT, dublado/legendado, busca por título ou grupo e ordenação |
