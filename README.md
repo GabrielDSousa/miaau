@@ -10,6 +10,7 @@
 | Onde | Link |
 |---|---|
 | Site | <https://miaau-spike.miaau.workers.dev> |
+| Como funciona | <https://miaau-spike.miaau.workers.dev/como-funciona> |
 | Repositório | <https://github.com/GabrielDSousa/miaau> |
 | API (JSON) | <https://miaau-spike.miaau.workers.dev/api/stats> |
 | Feed RSS (PT-BR) | <https://miaau-spike.miaau.workers.dev/feed.xml?variant=br> |
@@ -28,6 +29,7 @@
 | Coleta agendada | ✅ funcionando | cron da Cloudflare a cada 10 min dispara o ciclo no GitHub Actions |
 | Coleta por disparo manual | ✅ funcionando | um ciclo completo leva ~15 s |
 | Interface web | ✅ funcionando | sem build, sem framework; uma requisição por página |
+| Como funciona | ✅ funcionando | fontes, classificação, limites e canal de correção |
 | Busca e filtros | ✅ funcionando | abas PT-BR/PT-PT, dublado/legendado, busca por título ou grupo e ordenação |
 | Feed RSS | ✅ funcionando | 50 itens mais recentes, por variante e tipo |
 | Histórico (backfill) | ✅ inicial | 8 termos de busca, até 1.000 resultados cada; não é o arquivo completo |

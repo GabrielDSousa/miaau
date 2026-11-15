@@ -67,10 +67,76 @@ export const PAGE_HTML = `<!doctype html>
 
 <footer class="wrap foot">
   <p>O Miaau indexa apenas metadados públicos e aponta para a página original no Nyaa — não hospeda arquivos.</p>
-  <p class="muted">A classificação é automática e pode errar. <a href="https://github.com/GabrielDSousa/miaau" rel="noopener">Código e correções no GitHub</a> · <a href="/feed.xml?variant=br">RSS</a>.</p>
+  <p class="muted">A classificação é automática e pode errar. <a href="/como-funciona">Como funciona</a> · <a href="https://github.com/GabrielDSousa/miaau" rel="noopener">Código e correções no GitHub</a> · <a href="/feed.xml?variant=br">RSS</a>.</p>
 </footer>
 
 <script src="/app.js"></script>
+</body>
+</html>
+`;
+
+export const ABOUT_HTML = `<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Como funciona — Miaau</title>
+<meta name="description" content="De onde vêm os dados do Miaau, como cada torrent é classificado e o que significa estar verificado.">
+<meta name="color-scheme" content="dark">
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%90%B1%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-inner">
+    <a class="brand" href="/">Miaau<span class="paw">.</span></a>
+    <p class="tagline">anime com áudio ou legenda em português, direto do Nyaa</p>
+  </div>
+</header>
+
+<main class="wrap prose">
+  <h1>Como funciona</h1>
+
+  <h2>De onde vêm os dados</h2>
+  <p>O Miaau lê o <strong>RSS público de anime do Nyaa</strong> e, para o
+  histórico, a busca pública do mesmo site. Nada de conta, login ou API paga.
+  Cada item guarda o link para a página original — o Miaau não hospeda
+  arquivos.</p>
+
+  <h2>Como cada torrent é classificado</h2>
+  <p>São duas dimensões independentes:</p>
+  <ul>
+    <li><strong>tipo</strong>: dublado, legendado ou ambos;</li>
+    <li><strong>variante</strong>: PT-BR, PT-PT ou ambos.</li>
+  </ul>
+  <p>O título é a primeira evidência. Nomes de grupo conhecidos ajudam quando o
+  título não diz o idioma. Casos ambíguos — "Multi-Subs", "Dual Audio",
+  "Legendado" sem país — são abertos na página do torrent e a descrição é lida
+  para confirmar.</p>
+
+  <h2>O que significa "verificado"</h2>
+  <p>Um item verificado teve a página de detalhe lida pelo coletor. Os demais
+  foram classificados pelo título e pela assinatura do grupo, com a nota de
+  confiança e a evidência sempre visíveis no card.</p>
+
+  <h2>Limites</h2>
+  <ul>
+    <li>A classificação é automática e pode errar. A confiança existe para isso.</li>
+    <li>PT-BR e PT-PT ficam em abas separadas; releases com os dois aparecem nas duas.</li>
+    <li>O histórico cobre termos de busca por idioma, não o Nyaa inteiro.</li>
+    <li>Seeders e tamanho são uma fotografia do momento da coleta.</li>
+  </ul>
+
+  <h2>Correções e remoção</h2>
+  <p>Encontrou um erro ou quer remover um item? Escreva para
+  <strong>gabrielramos.email@gmail.com</strong> ou abra uma issue no
+  <a href="https://github.com/GabrielDSousa/miaau" rel="noopener">repositório</a>.
+  Relatos de classificação errada viram teste.</p>
+</main>
+
+<footer class="wrap foot">
+  <p><a href="/">Voltar ao catálogo</a> · <a href="/feed.xml?variant=br">RSS</a></p>
+</footer>
 </body>
 </html>
 `;
@@ -230,6 +296,20 @@ button[aria-pressed="true"]:hover { color: #16180f; background: var(--accent); }
 .foot { border-top: 1px solid var(--line-soft); padding: 1.5rem 0 3rem; color: var(--ink-faint); font-size: 0.82rem; }
 .foot p { margin: 0.25rem 0; }
 .muted { color: var(--ink-faint); }
+
+.prose { padding: 2rem 0 4rem; max-width: 44rem; }
+.prose h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.9rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 1rem;
+}
+.prose h2 { font-size: 1.1rem; margin: 1.9rem 0 0.5rem; color: var(--ink); }
+.prose p, .prose li { color: var(--ink-dim); }
+.prose ul { padding-left: 1.2rem; }
+.prose li { margin: 0.25rem 0; }
+.prose strong { color: var(--ink); }
 
 @media (max-width: 40rem) {
   .brand { font-size: 1.7rem; }

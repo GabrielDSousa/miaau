@@ -31,7 +31,7 @@ import {
 import { dispatchCollection, type DispatchEnv } from "./dispatch.ts";
 import { catalogStats, listTorrents, parseListQuery, type QueryDb } from "./api.ts";
 import { buildFeed } from "./feed.ts";
-import { APP_JS, PAGE_HTML, STYLE_CSS } from "./web.ts";
+import { APP_JS, ABOUT_HTML, PAGE_HTML, STYLE_CSS } from "./web.ts";
 
 interface Env extends IngestEnv, DispatchEnv {
   NYAA_BASE: string;
@@ -99,6 +99,10 @@ export default {
     try {
       if (route === "/" || route === "/index.html") {
         return new Response(PAGE_HTML, { headers: HTML_HEADERS });
+      }
+
+      if (route === "/como-funciona") {
+        return new Response(ABOUT_HTML, { headers: HTML_HEADERS });
       }
 
       if (route === "/style.css") {
