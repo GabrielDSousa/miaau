@@ -274,8 +274,8 @@ function toSeries(row: Record<string, unknown>): SeriesListItem {
     maxSizeBytes: row.max_size === null || row.max_size === undefined ? null : Number(row.max_size),
     confidence: Number(row.confidence ?? 0),
     verifiedCount: Number(row.verified ?? 0),
-    kinds: parseList(row.kinds),
-    variants: parseList(row.variants),
+    kinds: parseList(row.kinds).sort(),
+    variants: parseList(row.variants).sort(),
     firstEpisode: row.first_episode === null || row.first_episode === undefined ? null : Number(row.first_episode),
     lastEpisode: row.last_episode === null || row.last_episode === undefined ? null : Number(row.last_episode),
   };
