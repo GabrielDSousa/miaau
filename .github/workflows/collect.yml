@@ -39,7 +39,9 @@ permissions:
 jobs:
   cycle:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # O backfill diário varre termos + grupos (até ~230 buscas a 1 req/s) e não
+    # cabe nos 10 min do ciclo antigo.
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4

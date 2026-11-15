@@ -134,7 +134,7 @@ export const ABOUT_HTML = `<!doctype html>
   <ul>
     <li>A classificação é automática e pode errar. A confiança existe para isso.</li>
     <li>PT-BR e PT-PT ficam em abas separadas; releases com os dois aparecem nas duas.</li>
-    <li>O histórico cobre termos de busca por idioma, não o Nyaa inteiro.</li>
+    <li>O histórico cobre termos de busca e tags de grupos conhecidos, não o Nyaa inteiro.</li>
     <li>Seeders e tamanho são uma fotografia do momento da coleta.</li>
   </ul>
 

@@ -6,9 +6,14 @@
  * página e um teto de 1000 resultados por termo.
  *
  * Não existe varredura "de tudo": seriam centenas de milhares de páginas. O que
- * existe é um conjunto pequeno de termos que o público-alvo usaria — "PT-BR",
- * "Dublado", "Legendado" etc. Cada termo cobre até 1000 itens, e a união deles
- * é o catálogo inicial. Depois disso o RSS incremental mantém o resto.
+ * existe são três caminhos:
+ *
+ *   1. termos que o público-alvo usaria ("PT-BR", "Dublado", "Legendado"...);
+ *   2. tags de grupos de fansub conhecidos (`[WF]`, `[Anitsu]`...) — pega
+ *      releases que o título não etiqueta como "PT-BR";
+ *   3. varredura nas duas pontas quando um termo bate no teto de 1000: o Nyaa
+ *      devolve sempre os 1000 mais recentes, então a página em ordem crescente
+ *      recupera o começo do histórico.
  *
  * O backfill **não abre detalhes**: ele grava o que o título já diz e deixa os
  * candidatos na fila de verificação, que drena no ciclo normal. É por isso que
@@ -30,10 +35,10 @@ import type { Remote } from "./remote.ts";
  * Termos de busca.
  *
  * A ordem importa só para o log: os primeiros são os mais precisos. Termos
- * amplos ("Multi-Sub", "Dual Audio") ficaram de fora de propósito — eles
- * trazem milhares de releases sem português e transformariam o backfill num
- * trabalho de verificação de dias. Releases amplos novos continuam entrando
- * pelo RSS e sendo verificados na fila.
+ * amplos("Multi-Sub", "Dual Audio") ficam de fora de propósito — eles trazem
+ * milhares de releases sem português e transformariam o backfill num trabalho
+ * de verificação de dias. Os termos em português abaixo foram medidos no Nyaa
+ * (cada um devolve entre 1 e 109 itens em `1_0`), então custam poucas páginas.
  */
 export const BACKFILL_TERMS = [
   "PT-BR",
@@ -44,28 +49,82 @@ export const BACKFILL_TERMS = [
   "Legendado",
   "Brazilian",
   "PT-PT",
+  "Brasil",
+  "Brasileiro",
+  "Brasileira",
+  "Dublagem",
+  "Áudio PT",
+  "Dual Áudio",
+  "Brazilian Portuguese",
+  "Português Brasileiro",
 ];
 
-/** O Nyaa lista 75 por página e trava em 1000 resultados por termo. */
+/**
+ * Grupos de fansub em português.
+ *
+ * A busca `q=[Grupo]` casa as **palavras** do termo, não a tag inteira: `[AT]`
+ * vira "at" e devolve 1000 raws "AT-X TV"; `[BD_SUBS]` vira "bd" + "subs" e
+ * devolve qualquer remux. Por isso a lista abaixo foi medida e conferida nos
+ * títulos da primeira página — só entraram tags que de fato aparecem como tag
+ * de grupo em releases com português. Ficaram de fora `AT`, `BD_SUBS`, `N A F`,
+ * `adn`, `Puto` (raws alemães/BDMV) e `Fate4Anime` (BDRip sem PT no título).
+ */
+export const BACKFILL_GROUPS = [
+  "WF",
+  "FênixFansub",
+  "TPABR",
+  "Anitsu",
+  "IceBlue",
+  "HanaEncode",
+  "ViperFansub",
+  "Anipakku",
+  "Anirrent-Dubs",
+  "TédioFansub",
+  "Pombo Subs",
+  "Animesvision.us",
+  "Poppin'Raws",
+  "Kekkan",
+  "Trix",
+  "Lelouch",
+];
+
+/** O Nyaa lista 75 por página e trava em 1000 resultados por busca. */
 const PAGE_SIZE = 75;
 const MAX_PAGES = 14;
+const SEARCH_CAP = 1000;
 
 export interface BackfillOptions {
   remote: Remote;
   fetcher: Fetcher;
   now: () => Date;
+  /**
+   * Termos livres. Quando informado sem `groups`, o backfill roda **só** esses
+   * termos — é o modo usado para um teste focado, não uma varredura completa.
+   */
   terms?: string[];
-  /** Teto de páginas por termo (1..14). */
+  /** Tags de grupo, com ou sem colchetes. `[]` é aplicado na hora da busca. */
+  groups?: string[];
+  /** Teto de páginas por termo e por direção (1..14). */
   maxPages?: number;
+  /** Varre de trás para frente quando a busca bate no teto de 1000. */
+  dualSweep?: boolean;
+  /** Teto de requisições de busca da execução (protege o runner). */
+  maxRequests?: number;
   ruleVersion: number;
   onTerm?: (term: string, found: number, pages: number) => void;
   log?: (msg: string) => void;
 }
 
 export interface TermResult {
+  /** Rótulo exibido: o termo cru ou `[Grupo]`. */
   term: string;
+  kind: "term" | "group";
   found: number;
   pages: number;
+  /** Direções realmente varridas; `both` só quando a busca bate no teto. */
+  sweeps: Array<"desc" | "asc">;
+  /** Total reportado pelo Nyaa na primeira direção (1000 = teto). */
+  total: number | null;
   error?: string;
 }
 
@@ -80,23 +139,40 @@ export interface BackfillResult {
   skipped: number;
   queued: number;
   byStatus: Record<string, number>;
+  /** Requisições de busca feitas (sem contar retries internos do fetcher). */
+  requests: number;
+  /** `true` quando o teto de requisições interrompeu a varredura. */
+  truncated: boolean;
   ingestMs: number;
   errors: string[];
 }
 
-function searchPath(term: string, page: number): string {
-  return `/?q=${encodeURIComponent(term)}&c=1_0&f=0&s=id&o=desc&p=${page}`;
+function searchPath(query: string, page: number, order: "asc" | "desc"): string {
+  return `/?q=${encodeURIComponent(query)}&c=1_0&f=0&s=id&o=${order}&p=${page}`;
+}
+
+/** Normaliza a tag de grupo: `WF` e `[WF]` viram a mesma busca, `[WF]`. */
+function groupQuery(group: string): string {
+  const bare = group.trim().replace(/^\[+|\]+$/g, "");
+  return `[${bare}]`;
 }
 
 export async function runBackfill(opts: BackfillOptions): Promise<BackfillResult> {
   const { remote, fetcher, now } = opts;
   const log = opts.log ?? (() => {});
-  const terms = opts.terms?.length ? opts.terms : BACKFILL_TERMS;
   const rawMaxPages = opts.maxPages ?? MAX_PAGES;
   const maxPages = Number.isFinite(rawMaxPages)
     ? Math.min(Math.max(1, Math.floor(rawMaxPages)), MAX_PAGES)
     : MAX_PAGES;
   const ruleVersion = opts.ruleVersion;
+  const dualSweep = opts.dualSweep ?? true;
+  const rawBudget = opts.maxRequests ?? 300;
+  const budget = Number.isFinite(rawBudget) ? Math.max(1, Math.floor(rawBudget)) : 300;
+
+  // Um `terms` explícito sem `groups` é uma execução focada: não mistura a
+  // lista padrão de grupos, senão o teste (e o operador) perde o controle.
+  const terms = opts.terms?.length ? opts.terms : BACKFILL_TERMS;
+  const groups = opts.groups ?? (opts.terms?.length ? [] : BACKFILL_GROUPS);
 
   const result: BackfillResult = {
     ok: false,
@@ -108,6 +184,8 @@ export async function runBackfill(opts: BackfillOptions): Promise<BackfillResult
     skipped: 0,
     queued: 0,
     byStatus: {},
+    requests: 0,
+    truncated: false,
     ingestMs: 0,
     errors: [],
   };
@@ -115,41 +193,81 @@ export async function runBackfill(opts: BackfillOptions): Promise<BackfillResult
   const byId = new Map<number, RssItem>();
 
   // ---- 1. busca
-  for (const term of terms) {
-    let pages = 0;
-    let found = 0;
-    let error: string | undefined;
+  for (const [kind, list] of [
+    ["term", terms],
+    ["group", groups],
+  ] as const) {
+    for (const raw of list) {
+      const query = kind === "group" ? groupQuery(raw) : raw.trim();
+      if (!query || (kind === "group" && query === "[]")) continue;
 
-    for (let page = 1; page <= maxPages; page++) {
-      try {
-        const res = await fetcher.get(searchPath(term, page));
-        const parsed = parseSearchPage(res.body);
-        pages = page;
+      const label = query;
+      let pages = 0;
+      let found = 0;
+      let total: number | null = null;
+      const sweeps: Array<"asc" | "desc"> = [];
+      let error: string | undefined;
 
-        for (const row of parsed.items) {
-          if (!row.categoryId || !row.categoryId.startsWith("1_")) continue;
-          if (byId.has(row.id)) continue;
-          byId.set(row.id, row);
-          found++;
+      /** Varre uma direção até a última página, o teto ou o fim do orçamento. */
+      const sweep = async (order: "asc" | "desc"): Promise<"done" | "error" | "budget"> => {
+        sweeps.push(order);
+        for (let page = 1; page <= maxPages; page++) {
+          if (result.requests >= budget) return "budget";
+
+          let parsed;
+          try {
+            const res = await fetcher.get(searchPath(query, page, order));
+            result.requests++;
+            parsed = parseSearchPage(res.body);
+          } catch (err) {
+            error = err instanceof Error ? err.message : String(err);
+            result.errors.push(`${label} ${order} p${page}: ${error}`);
+            log(`${label} (${order}): falhou na página ${page}: ${error}`);
+            return "error";
+          }
+
+          pages++;
+          if (parsed.total !== null) total = parsed.total;
+
+          for (const row of parsed.items) {
+            if (!row.categoryId || !row.categoryId.startsWith("1_")) continue;
+            if (byId.has(row.id)) continue;
+            byId.set(row.id, row);
+            found++;
+          }
+
+          // Sem itens, ou última página do total reportado: não adianta pedir mais.
+          const exhausted =
+            parsed.items.length === 0 ||
+            (parsed.total !== null && page * PAGE_SIZE >= parsed.total);
+          if (exhausted) return "done";
         }
+        return "done";
+      };
 
-        // Sem itens, ou última página do total reportado: não adianta pedir mais.
-        const exhausted =
-          parsed.items.length === 0 ||
-          (parsed.total !== null && page * PAGE_SIZE >= parsed.total);
-        if (exhausted) break;
-      } catch (err) {
-        error = err instanceof Error ? err.message : String(err);
-        result.errors.push(`${term} p${page}: ${error}`);
-        log(`${term}: falhou na página ${page}: ${error}`);
+      // Recentes primeiro: é a ponta que o RSS não alcança mais.
+      const first = await sweep("desc");
+      // Teto de 1000 significa que existe histórico além da janela recente.
+      if (first === "done" && dualSweep && total !== null && total >= SEARCH_CAP) {
+        await sweep("asc");
+      }
+
+      if (result.requests >= budget) result.truncated = true;
+
+      result.terms.push({ term: label, kind, found, pages, sweeps, total, error });
+      result.seen += found;
+      opts.onTerm?.(label, found, pages);
+      log(
+        `${label}: ${found} item(ns) em ${pages} página(s) ` +
+          `[${sweeps.join("+")}]${error ? " (com erro)" : ""}`,
+      );
+
+      if (result.truncated) {
+        log(`orçamento de ${budget} busca(s) esgotado — varredura interrompida`);
         break;
       }
     }
-
-    result.terms.push({ term, found, pages, error });
-    result.seen += found;
-    opts.onTerm?.(term, found, pages);
-    log(`${term}: ${found} item(ns) em ${pages} página(s)${error ? " (com erro)" : ""}`);
+    if (result.truncated) break;
   }
 
   // ---- 2. classificação

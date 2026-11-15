@@ -2,15 +2,17 @@
  * Testes do backfill histórico.
  *
  * O que importa aqui não é a rede: é o contrato de paginação (parar na última
- * página e no teto do Nyaa), a deduplicação por id/hash e o fato de um termo
- * quebrado não impedir os seguintes.
+ * página, no teto do Nyaa e no orçamento de requisições), a varredura nas duas
+ * direções quando a busca bate em 1000, a busca por tag de grupo, a
+ * deduplicação por id/hash e o fato de um termo quebrado não impedir os
+ * seguintes.
  */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { INGEST_MAX_ITEMS, type IngestPayload, type IngestResponse } from "../../core/src/protocol.ts";
-import { runBackfill, BACKFILL_TERMS } from "../src/backfill.ts";
+import { runBackfill, BACKFILL_GROUPS, BACKFILL_TERMS } from "../src/backfill.ts";
 import type { Fetcher, FetchResult } from "../src/http.ts";
 import type { Remote } from "../src/remote.ts";
 
@@ -53,15 +55,17 @@ class FakeFetcher implements Fetcher {
   readonly calls: string[] = [];
   private readonly pages = new Map<string, string | Error>();
 
-  add(term: string, pageNo: number, body: string | Error): void {
-    this.pages.set(`${term}#${pageNo}`, body);
+  add(term: string, pageNo: number, body: string | Error, order: "asc" | "desc" = "desc"): void {
+    this.pages.set(`${term}#${order}#${pageNo}`, body);
   }
 
   async get(path: string): Promise<FetchResult> {
     this.calls.push(path);
-    const q = new URL(`https://nyaa.si${path}`).searchParams.get("q") ?? "";
-    const p = Number(new URL(`https://nyaa.si${path}`).searchParams.get("p") ?? 1);
-    const body = this.pages.get(`${q}#${p}`) ?? page([], 0);
+    const url = new URL(`https://nyaa.si${path}`);
+    const q = url.searchParams.get("q") ?? "";
+    const p = Number(url.searchParams.get("p") ?? 1);
+    const order = url.searchParams.get("o") === "asc" ? "asc" : "desc";
+    const body = this.pages.get(`${q}#${order}#${p}`) ?? page([], 0);
     if (body instanceof Error) throw body;
     return { status: 200, body, bytes: body.length, ms: 1, headers: {}, url: path };
   }
@@ -142,7 +146,9 @@ test("respeita o teto de páginas mesmo com total maior", async () => {
 
   const remote = new FakeRemote();
   const res = await runBackfill(
-    opts(fetcher, remote, { terms: ["PT-BR"], maxPages: 2 }) as Parameters<typeof runBackfill>[0],
+    opts(fetcher, remote, { terms: ["PT-BR"], maxPages: 2, dualSweep: false }) as Parameters<
+      typeof runBackfill
+    >[0],
   );
 
   assert.equal(fetcher.calls.length, 2);
@@ -246,8 +252,111 @@ test("falha de ingest é registrada e interrompe os lotes", async () => {
   assert.match(res.errors[0], /502/);
 });
 
-test("BACKFILL_TERMS é pequeno e não inclui termos amplos", () => {
-  assert.ok(BACKFILL_TERMS.length <= 10);
+test("total no teto de 1000 varre também em ordem crescente", async () => {
+  const fetcher = new FakeFetcher();
+  // Descendente: os mais novos começam em 5000. Ascendente: os mais antigos
+  // começam em 1000. Nenhum id se repete entre as duas pontas.
+  for (let p = 1; p <= 3; p++) {
+    fetcher.add("PT-BR", p, page([row(5000 + p, `[G] Novo ${p} - 01 [PT-BR]`)], 1000, p));
+    fetcher.add("PT-BR", p, page([row(1000 + p, `[G] Antigo ${p} - 01 [PT-BR]`)], 1000, p), "asc");
+  }
+
+  const remote = new FakeRemote();
+  const res = await runBackfill(
+    opts(fetcher, remote, { terms: ["PT-BR"], maxPages: 3 }) as Parameters<typeof runBackfill>[0],
+  );
+
+  assert.equal(fetcher.calls.length, 6, "três páginas em cada direção");
+  assert.deepEqual(res.terms[0].sweeps, ["desc", "asc"]);
+  assert.deepEqual(remote.posts[0].items.map((i) => i.id).sort(), [1001, 1002, 1003, 5001, 5002, 5003]);
+});
+
+test("total abaixo do teto não varre de trás para frente", async () => {
+  const fetcher = new FakeFetcher();
+  fetcher.add("Dublado", 1, page([row(60, "[G] Anime - 01 [Dublado]")], 120));
+
+  const remote = new FakeRemote();
+  const res = await runBackfill(
+    opts(fetcher, remote, { terms: ["Dublado"] }) as Parameters<typeof runBackfill>[0],
+  );
+
+  assert.deepEqual(res.terms[0].sweeps, ["desc"]);
+  assert.ok(!fetcher.calls.some((c) => c.includes("o=asc")));
+});
+
+test("varre grupos pela tag entre colchetes", async () => {
+  const fetcher = new FakeFetcher();
+  fetcher.add("[WF]", 1, page([row(70, "[WF] Anime - 01 [1080p]")], 1));
+  fetcher.add("[Anitsu]", 1, page([row(71, "[Anitsu] Anime - 02 [720p]")], 1));
+
+  const remote = new FakeRemote();
+  const res = await runBackfill(
+    opts(fetcher, remote, { terms: ["PT-BR"], groups: ["WF", "[Anitsu]"] }) as Parameters<
+      typeof runBackfill
+    >[0],
+  );
+
+  assert.ok(fetcher.calls.some((c) => c.includes(`q=${encodeURIComponent("[WF]")}`)));
+  assert.ok(fetcher.calls.some((c) => c.includes(`q=${encodeURIComponent("[Anitsu]")}`)));
+  assert.deepEqual(res.terms.map((t) => [t.term, t.kind]), [
+    ["PT-BR", "term"],
+    ["[WF]", "group"],
+    ["[Anitsu]", "group"],
+  ]);
+  assert.deepEqual(remote.posts[0].items.map((i) => i.id).sort(), [70, 71]);
+});
+
+test("termos explícitos sem grupos não puxam a lista padrão de grupos", async () => {
+  const fetcher = new FakeFetcher();
+  fetcher.add("PT-BR", 1, page([row(80, "[G] Anime - 01 [PT-BR]")], 1));
+
+  const remote = new FakeRemote();
+  const res = await runBackfill(
+    opts(fetcher, remote, { terms: ["PT-BR"] }) as Parameters<typeof runBackfill>[0],
+  );
+
+  assert.equal(res.terms.every((t) => t.kind === "term"), true);
+});
+
+test("orçamento de requisições interrompe a varredura sem perder o que já entrou", async () => {
+  const fetcher = new FakeFetcher();
+  for (let p = 1; p <= 5; p++) {
+    fetcher.add("PT-BR", p, page([row(200 + p, `[G] Anime ${p} - 01 [PT-BR]`)], 1000, p));
+  }
+  fetcher.add("PT-PT", 1, page([row(300, "[G] Anime - 09 [PT-PT]")], 1));
+
+  const remote = new FakeRemote();
+  const res = await runBackfill(
+    opts(fetcher, remote, { terms: ["PT-BR", "PT-PT"], maxPages: 5, maxRequests: 3, dualSweep: false }) as Parameters<
+      typeof runBackfill
+    >[0],
+  );
+
+  assert.equal(res.requests, 3);
+  assert.equal(res.truncated, true);
+  assert.equal(res.ok, true, "orçamento não é erro de coleta");
+  assert.equal(res.sent, 3);
+  assert.equal(res.terms.length, 1, "o termo seguinte nem começou");
+});
+
+test("BACKFILL_TERMS não inclui termos amplos e cobre as variantes medidas", () => {
+  assert.ok(BACKFILL_TERMS.length <= 20);
   assert.ok(BACKFILL_TERMS.includes("PT-BR"));
+  assert.ok(BACKFILL_TERMS.includes("PT-PT"));
+  assert.ok(BACKFILL_TERMS.includes("Dublado"));
+  assert.ok(BACKFILL_TERMS.includes("Brazilian Portuguese"));
   assert.ok(!BACKFILL_TERMS.includes("Multi-Sub"));
+  assert.ok(!BACKFILL_TERMS.includes("Dual Audio"));
+  assert.equal(new Set(BACKFILL_TERMS).size, BACKFILL_TERMS.length, "sem termos repetidos");
+});
+
+test("BACKFILL_GROUPS não repete tags e evita termos que casam palavra comum", () => {
+  assert.ok(BACKFILL_GROUPS.length >= 15);
+  assert.ok(BACKFILL_GROUPS.includes("WF"));
+  assert.ok(BACKFILL_GROUPS.includes("Anitsu"));
+  for (const noisy of ["AT", "BD_SUBS", "N A F", "adn", "Puto", "Fate4Anime"]) {
+    assert.ok(!BACKFILL_GROUPS.includes(noisy), `${noisy} casaria palavra comum no Nyaa`);
+  }
+  assert.ok(!BACKFILL_GROUPS.some((g) => g.startsWith("[")));
+  assert.equal(new Set(BACKFILL_GROUPS).size, BACKFILL_GROUPS.length, "sem grupos repetidos");
 });

@@ -23,6 +23,8 @@ export interface DispatchEnv {
   GITHUB_REF?: string;
   /** Quantas páginas de detalhe o ciclo deve abrir. */
   GITHUB_LIMIT?: string;
+  /** Cron que roda o ciclo incremental; qualquer outro dispara o backfill. */
+  GITHUB_CRON?: string;
 }
 
 export interface DispatchOptions {
@@ -31,6 +33,8 @@ export interface DispatchOptions {
   backoffMs?: number;
   sleep?: (ms: number) => Promise<void>;
   warn?: (msg: string) => void;
+  /** `cycle` (padrão) ou `backfill`. */
+  task?: "cycle" | "backfill";
 }
 
 export interface DispatchResult {
@@ -71,6 +75,7 @@ export async function dispatchCollection(
   const workflow = (env.GITHUB_WORKFLOW ?? DEFAULT_WORKFLOW).trim();
   const ref = (env.GITHUB_REF ?? DEFAULT_REF).trim();
   const limit = (env.GITHUB_LIMIT ?? "10").trim();
+  const task = opts.task ?? "cycle";
 
   if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
     return { ok: false, configured: true, status: 0, message: `GITHUB_REPO inválido: ${repo.slice(0, 60)}` };
@@ -102,12 +107,17 @@ export async function dispatchCollection(
           "content-type": "application/json",
           "user-agent": "Miaau-worker/0.2",
         },
-        body: JSON.stringify({ ref, inputs: { limit } }),
+        body: JSON.stringify({ ref, inputs: { limit, task } }),
       });
 
       // Sucesso do dispatch é 204 No Content.
       if (res.status === 204 || res.status === 200) {
-        return { ok: true, configured: true, status: res.status, message: `workflow ${workflow} disparado em ${ref}` };
+        return {
+          ok: true,
+          configured: true,
+          status: res.status,
+          message: `workflow ${workflow} disparado em ${ref} (task=${task})`,
+        };
       }
 
       const body = await res.text();

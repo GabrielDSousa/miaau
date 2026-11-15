@@ -27,6 +27,7 @@
 | Verificação pela descrição | ✅ funcionando | abre a página do torrent e confirma os idiomas |
 | Catálogo de metadados | ✅ funcionando | catálogo incremental, com evidência e confiança por item |
 | Coleta agendada | ✅ funcionando | cron da Cloudflare a cada 10 min dispara o ciclo no GitHub Actions |
+| Backfill periódico | ✅ funcionando | cron diário (06:17 UTC) revarre termos e grupos de fansub |
 | Coleta por disparo manual | ✅ funcionando | um ciclo completo leva ~15 s |
 | Interface web | ✅ funcionando | sem build, sem framework; uma requisição por página |
 | Como funciona | ✅ funcionando | fontes, classificação, limites e canal de correção |
@@ -37,12 +38,13 @@
 | Indexação | ✅ básico | `robots.txt` e `sitemap.xml` com as páginas públicas |
 | Cache de borda | ✅ funcionando | leituras públicas guardadas no Cache API, com TTL curto |
 | Feed RSS | ✅ funcionando | 50 itens mais recentes, por variante e tipo |
-| Histórico (backfill) | ✅ inicial | 8 termos de busca, até 1.000 resultados cada; não é o arquivo completo |
+| Histórico (backfill) | ✅ ampliado | 16 termos + 16 grupos de fansub; termos que batem no teto de 1.000 são varridos nas duas direções; não é o arquivo completo |
 
 Primeira execução automática confirmada em 15/11/2026 às 22:10 UTC, sem
-intervenção manual. Em 15/11/2026 o catálogo tinha **3.400 torrents**, sendo
-**1.075 confirmados** com português — 964 na aba PT-BR e 116 na PT-PT. Os
-candidatos restantes entram na fila de verificação aos poucos.
+intervenção manual. Em 15/11/2026, depois do backfill ampliado, o catálogo tinha
+**5.700 torrents**, sendo **1.367 confirmados** com português — 1.256 na aba
+PT-BR e 116 na PT-PT — em **892 séries**. Os candidatos restantes entram na fila
+de verificação aos poucos.
 
 ## O que é o Miaau
 
@@ -58,7 +60,8 @@ O Miaau faz esse trabalho de forma contínua:
 - **Verifica** os casos ambíguos ("Multi-Subs", "Dual Audio") abrindo a página do
   torrent e lendo a descrição.
 - **Guarda** a evidência de cada decisão, com uma nota de confiança.
-- **Recupera** o histórico com buscas semeadas por idioma, sem varrer o Nyaa inteiro.
+- **Recupera** o histórico com buscas semeadas por idioma e por grupo de fansub,
+  sem varrer o Nyaa inteiro.
 - **Publica** um catálogo incremental: a primeira carga é grande, as seguintes
   só atualizam o que mudou.
 
@@ -74,7 +77,8 @@ conteúdo adulto.
 - catálogo persistido, com atualização incremental e fila de verificação;
 - coleta executada em runner efêmero, sem estado local;
 - API de ingestão autenticada e idempotente;
-- backfill do histórico por busca HTML, com fila de verificação incremental;
+- backfill do histórico por termos, grupos de fansub e varredura nas duas
+  direções dos termos que batem no teto do Nyaa, com fila de verificação;
 - site público com abas PT-BR/PT-PT, filtro por dublado/legendado e busca;
 - visão por série, agrupando episódios e lotes do mesmo anime;
 - selo de novidade e link de correção em cada card;

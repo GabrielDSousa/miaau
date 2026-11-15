@@ -12,9 +12,11 @@
  * Na nuvem (sem estado, fala com o Worker):
  *   node --env-file-if-exists=.env scripts/miaau.ts cycle --limit 10
  *   node --env-file-if-exists=.env scripts/miaau.ts backfill --pages 14
+ *   node --env-file-if-exists=.env scripts/miaau.ts backfill --terms "PT-BR,Dublado" --no-groups
  *
  * `backfill` varre a busca HTML (histórico) e não abre detalhes; os candidatos
- * entram na fila e drenam no `cycle`.
+ * entram na fila e drenam no `cycle`. Sem `--terms`/`--groups` ele usa as listas
+ * padrão de termos e de grupos de fansub.
  *
  * Variáveis:
  *   MIAU_DB            caminho do SQLite      (padrão: data/miaau.db)
@@ -294,12 +296,22 @@ async function backfill(fetcher: Fetcher): Promise<void> {
   const remote = makeRemote("backfill");
   if (!remote) return;
 
-  const terms = flag("terms")
-    ?.split(",")
-    .map((t) => t.trim())
-    .filter(Boolean);
+  const listFlag = (name: string): string[] | undefined => {
+    const raw = flag(name);
+    if (raw === undefined) return undefined;
+    return raw
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+  };
+
+  const terms = listFlag("terms");
+  // `--no-groups` desliga a varredura por tag; `--groups` troca a lista.
+  const groups = has("no-groups") ? [] : listFlag("groups");
   const maxPagesRaw = Number(flag("pages") ?? 14);
   const maxPages = Number.isFinite(maxPagesRaw) ? Math.max(1, Math.floor(maxPagesRaw)) : 14;
+  const budgetRaw = Number(flag("budget") ?? 300);
+  const maxRequests = Number.isFinite(budgetRaw) ? Math.max(1, Math.floor(budgetRaw)) : 300;
 
   const t0 = Date.now();
   const r = await runBackfill({
@@ -307,16 +319,24 @@ async function backfill(fetcher: Fetcher): Promise<void> {
     fetcher,
     now: () => new Date(),
     terms,
+    groups,
     maxPages,
+    maxRequests,
     ruleVersion: RULE_VERSION,
     log: (m) => console.log(`  ${m}`),
   });
 
+  const termCount = r.terms.filter((t) => t.kind === "term").length;
+  const groupCount = r.terms.filter((t) => t.kind === "group").length;
+  const both = r.terms.filter((t) => t.sweeps.length > 1).length;
+
   console.log(
-    `backfill  ${r.ok ? "ok" : "FALHOU"}  termos=${r.terms.length} ` +
+    `backfill  ${r.ok ? "ok" : "FALHOU"}  termos=${termCount} grupos=${groupCount} ` +
+      `dupla-direção=${both} buscas=${r.requests} ` +
       `visto=${r.seen} duplicado=${r.duplicates} enviado=${r.sent} ` +
       `gravado=${r.written} fila+=${r.queued}`,
   );
+  if (r.truncated) console.log(`          orçamento de ${maxRequests} busca(s) esgotado — rode de novo para continuar`);
   console.log(
     `          só-título: confirmado=${r.byStatus.confirmed ?? 0} ` +
       `candidato=${r.byStatus.candidate ?? 0} descartado=${r.byStatus.rejected ?? 0}`,

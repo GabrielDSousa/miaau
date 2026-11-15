@@ -495,11 +495,17 @@ export default {
    *
    * Não lança: cron não tem cliente para receber erro, e um ciclo perdido é
    * recuperado no próximo — o D1 é a fonte da verdade.
+   *
+   * Dois crons: o de 10 min faz o ciclo incremental; qualquer outro horário é o
+   * backfill diário, que revarre termos e grupos para pegar o que o RSS e a
+   * fila não alcançam.
    */
   async scheduled(controller: { cron?: string }, env: Env): Promise<void> {
     const t0 = Date.now();
-    const res = await dispatchCollection(env, { warn: (m) => console.warn(m) });
-    const line = { ...res, ms: Date.now() - t0, cron: controller.cron ?? null };
+    const cycleCron = (env.GITHUB_CRON ?? "*/10 * * * *").trim();
+    const task = controller.cron && controller.cron !== cycleCron ? "backfill" : "cycle";
+    const res = await dispatchCollection(env, { task, warn: (m) => console.warn(m) });
+    const line = { ...res, task, ms: Date.now() - t0, cron: controller.cron ?? null };
 
     if (res.ok) {
       console.log("dispatch", JSON.stringify(line));

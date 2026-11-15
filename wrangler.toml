@@ -35,13 +35,18 @@ GITHUB_REF = "main"
 # Detalhes abertos por ciclo disparado pelo cron. O backfill encheu a fila de
 # verificação; 25 drena ~3.600/dia sem passar de ~30 s por execução.
 GITHUB_LIMIT = "25"
+# Cron do ciclo incremental. O outro cron configurado abaixo dispara o backfill.
+GITHUB_CRON = "*/10 * * * *"
 
 # O agendador do GitHub Actions não disparou neste repositório, então quem
 # acorda a coleta é o cron da Cloudflare: a cada 10 min o Worker faz uma única
 # chamada à API do GitHub (workflow_dispatch). O Worker continua sem tocar no
 # Nyaa — quem coleta é o runner, que recebe 200 em vez de 429.
+#
+# O segundo cron é o backfill diário de cobertura (termos + tags de grupo, com
+# varredura nas duas direções dos termos que batem no teto de 1000 do Nyaa).
 [triggers]
-crons = ["*/10 * * * *"]
+crons = ["*/10 * * * *", "17 6 * * *"]
 
 [[d1_databases]]
 binding = "DB"

@@ -60,7 +60,23 @@ test("sucesso é 204 sem corpo", async () => {
   assert.equal(res.status, 204);
   assert.match(captured[0].url, /^https:\/\/api\.github\.com\/repos\/GabrielDSousa\/miaau\/actions\/workflows\/collect\.yml\/dispatches$/);
   assert.equal(captured[0].init.method, "POST");
-  assert.deepEqual(JSON.parse(String(captured[0].init.body)), { ref: "main", inputs: { limit: "10" } });
+  assert.deepEqual(JSON.parse(String(captured[0].init.body)), {
+    ref: "main",
+    inputs: { limit: "10", task: "cycle" },
+  });
+});
+
+test("task=backfill vai no corpo do dispatch", async () => {
+  const captured: Captured[] = [];
+  await dispatchCollection(BASE_ENV, {
+    task: "backfill",
+    fetchImpl: stub([new Response(null, { status: 204 })], captured),
+  });
+
+  assert.deepEqual(JSON.parse(String(captured[0].init.body)), {
+    ref: "main",
+    inputs: { limit: "10", task: "backfill" },
+  });
 });
 
 test("token vai no header, no formato Bearer", async () => {
