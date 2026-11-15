@@ -1,0 +1,39 @@
+# Segredos e artefatos locais — nunca entram no repositório.
+
+# ambientes
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+
+# banco e estado local do coletor
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# estado da Cloudflare (contém token OAuth em ~/.config, mas o do projeto também)
+.wrangler/
+
+# dependências e caches
+node_modules/
+.npm/
+coverage/
+*.log
+
+# chaves e certificados
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+
+# sistema/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

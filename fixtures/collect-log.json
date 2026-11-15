@@ -1,0 +1,198 @@
+[
+  {
+    "slug": "feed-anime",
+    "url": "https://nyaa.si/?page=rss&c=1_0",
+    "status": 200,
+    "items": 75,
+    "bytes": 77364
+  },
+  {
+    "slug": "q-ptbr",
+    "url": "https://nyaa.si/?page=rss&q=PT-BR&c=1_0",
+    "status": 200,
+    "items": 75,
+    "bytes": 78447
+  },
+  {
+    "slug": "q-ptbr-noneng",
+    "url": "https://nyaa.si/?page=rss&q=PT-BR&c=1_3",
+    "status": 200,
+    "items": 75,
+    "bytes": 78334
+  },
+  {
+    "slug": "q-ptbr-eng",
+    "url": "https://nyaa.si/?page=rss&q=PT-BR&c=1_2",
+    "status": 200,
+    "items": 75,
+    "bytes": 85361
+  },
+  {
+    "slug": "q-ptbr-compact",
+    "url": "https://nyaa.si/?page=rss&q=ptbr&c=1_0",
+    "status": 200,
+    "items": 75,
+    "bytes": 75969
+  },
+  {
+    "slug": "q-portugues",
+    "url": "https://nyaa.si/?page=rss&q=portugues&c=1_0",
+    "status": 200,
+    "items": 75,
+    "bytes": 84522
+  },
+  {
+    "slug": "q-portugues-acento",
+    "url": "https://nyaa.si/?page=rss&q=portugu%C3%AAs&c=1_0",
+    "status": 200,
+    "items": 75,
+    "bytes": 74703
+  },
+  {
+    "slug": "q-dublado",
+    "url": "https://nyaa.si/?page=rss&q=dublado&c=1_0",
+    "status": 200,
+    "items": 75,
+    "bytes": 77626
+  },
+  {
+    "slug": "q-dublada",
+    "url": "https://nyaa.si/?page=rss&q=dublada&c=1_0",
+    "status": 200,
+    "items": 2,
+    "bytes": 2276
+  },
+  {
+    "slug": "q-legendado",
+    "url": "https://nyaa.si/?page=rss&q=legendado&c=1_0",
+    "status": 200,
+    "items": 75,
+    "bytes": 72901
+  },
+  {
+    "slug": "q-legendada",
+    "url": "https://nyaa.si/?page=rss&q=legendada&c=1_0",
+    "status": 200,
+    "items": 0,
+    "bytes": 374
+  },
+  {
+    "slug": "q-brazil",
+    "url": "https://nyaa.si/?page=rss&q=brazil&c=1_0",
+    "status": 200,
+    "items": 36,
+    "bytes": 35316
+  },
+  {
+    "slug": "q-brasileiro",
+    "url": "https://nyaa.si/?page=rss&q=brasileiro&c=1_0",
+    "status": 200,
+    "items": 4,
+    "bytes": 4478
+  },
+  {
+    "slug": "q-nacional",
+    "url": "https://nyaa.si/?page=rss&q=nacional&c=1_0",
+    "status": 200,
+    "items": 0,
+    "bytes": 372
+  },
+  {
+    "slug": "q-multi-audio",
+    "url": "https://nyaa.si/?page=rss&q=multi-audio&c=1_0",
+    "status": 200,
+    "items": 75,
+    "bytes": 82824
+  },
+  {
+    "slug": "q-dual-audio",
+    "url": "https://nyaa.si/?page=rss&q=dual-audio&c=1_0",
+    "status": 200,
+    "items": 75,
+    "bytes": 81777
+  },
+  {
+    "slug": "q-multi-sub",
+    "url": "https://nyaa.si/?page=rss&q=multi-sub&c=1_0",
+    "status": 200,
+    "items": 75,
+    "bytes": 81780
+  },
+  {
+    "slug": "q-multi",
+    "url": "https://nyaa.si/?page=rss&q=multi&c=1_0",
+    "status": 200,
+    "items": 75,
+    "bytes": 80064
+  },
+  {
+    "slug": "q-dual",
+    "url": "https://nyaa.si/?page=rss&q=dual&c=1_0",
+    "status": 200,
+    "items": 75,
+    "bytes": 82237
+  },
+  {
+    "slug": "q-portuguese",
+    "url": "https://nyaa.si/?page=rss&q=portuguese&c=1_0",
+    "status": 200,
+    "items": 75,
+    "bytes": 84524
+  },
+  {
+    "slug": "q-portugal",
+    "url": "https://nyaa.si/?page=rss&q=portugal&c=1_0",
+    "status": 200,
+    "items": 7,
+    "bytes": 7149
+  },
+  {
+    "slug": "q-anitsu",
+    "url": "https://nyaa.si/?page=rss&q=Anitsu&c=1_0",
+    "status": 200,
+    "items": 60,
+    "bytes": 64791
+  },
+  {
+    "slug": "q-anipakku",
+    "url": "https://nyaa.si/?page=rss&q=Anipakku&c=1_0",
+    "status": 200,
+    "items": 38,
+    "bytes": 42874
+  },
+  {
+    "slug": "q-wf",
+    "url": "https://nyaa.si/?page=rss&q=WF&c=1_0",
+    "status": 200,
+    "items": 75,
+    "bytes": 80691
+  },
+  {
+    "slug": "q-iceblue",
+    "url": "https://nyaa.si/?page=rss&q=IceBlue&c=1_0",
+    "status": 200,
+    "items": 40,
+    "bytes": 40714
+  },
+  {
+    "slug": "q-kekkan",
+    "url": "https://nyaa.si/?page=rss&q=Kekkan&c=1_0",
+    "status": 200,
+    "items": 20,
+    "bytes": 22756
+  },
+  {
+    "slug": "q-fenix",
+    "url": "https://nyaa.si/?page=rss&q=F%C3%AAnixFansub&c=1_0",
+    "status": 200,
+    "items": 75,
+    "bytes": 71468
+  },
+  {
+    "slug": "q-toonshub",
+    "url": "https://nyaa.si/?page=rss&q=ToonsHub&c=1_0",
+    "status": 200,
+    "items": 75,
+    "bytes": 79561
+  }
+]

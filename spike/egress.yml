@@ -1,0 +1,51 @@
+# Spike de egresso (Fase 0) — rode este arquivo em qualquer host candidato.
+#
+# Resultado em 2026-11-15:
+#   Cloudflare Workers → 429 em 100% das requisições (limite por IP do nginx do Nyaa)
+#   GitHub Actions     → 200 em 100% (25 RSS + 10 detalhes + 3 buscas)
+#
+# Uso:
+#   1. copie para .github/workflows/egress.yml num repo (público: o cron do Actions
+#      não roda em repo privado sem forma de pagamento nesta conta)
+#   2. gh workflow run egress.yml
+#   3. gh run view --log | grep -E "ok=|status="
+
+name: egress
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: burst
+        run: |
+          UA="Miaau-spike/0.1 (+gabrielramos.email@gmail.com)"
+          echo "egress ip: $(curl -s -m 20 https://ifconfig.me)"
+          echo "--- 25 x RSS sequencial ---"
+          ok=0; fail=0; : > /tmp/t
+          for i in $(seq 1 25); do
+            out=$(curl -s -o /tmp/b -w '%{http_code} %{size_download} %{time_total}' -m 40 -A "$UA" "https://nyaa.si/?page=rss&c=1_0")
+            set -- $out
+            echo "$1" >> /tmp/t
+            if [ "$1" = "200" ]; then ok=$((ok+1)); else fail=$((fail+1)); echo "  non-200 at #$i -> $out"; fi
+            sleep 0.5
+          done
+          echo "rss ok=$ok fail=$fail"
+          echo "rss status distribution:"; sort /tmp/t | uniq -c
+          echo "--- 10 x detalhe ---"
+          ok=0; fail=0; : > /tmp/t2
+          for i in 2132651 2132650 2132649 2132648 2132647 2132646 2132645 2132644 2132643 2132642; do
+            out=$(curl -s -o /dev/null -w '%{http_code} %{size_download} %{time_total}' -m 40 -A "$UA" "https://nyaa.si/view/$i")
+            set -- $out
+            echo "$1 $3" >> /tmp/t2
+            if [ "$1" = "200" ]; then ok=$((ok+1)); else fail=$((fail+1)); echo "  non-200 id=$i -> $out"; fi
+            sleep 0.5
+          done
+          echo "detail ok=$ok fail=$fail"
+          echo "detail status+time:"; cat /tmp/t2
+          echo "--- 3 x busca ---"
+          for p in 1 2 3; do
+            curl -s -o /dev/null -w "search p$p %{http_code} %{size_download} %{time_total}\n" -m 40 -A "$UA" "https://nyaa.si/?f=0&c=1_0&q=PT-BR&p=$p"
+            sleep 0.5
+          done

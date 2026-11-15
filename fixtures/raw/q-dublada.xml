@@ -1,0 +1,44 @@
+<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:nyaa="https://nyaa.si/xmlns/nyaa" version="2.0">
+	<channel>
+		<title>Nyaa - &#34;dublada&#34; - Torrent File RSS</title>
+		<description>RSS Feed for &#34;dublada&#34;</description>
+		<link>https://nyaa.si/</link>
+		<atom:link href="https://nyaa.si/?page=rss" rel="self" type="application/rss+xml" />
+		<item>
+			<title>Sakura Card Captors OP3 Abertura Dublada em Portugues</title>
+				<link>https://nyaa.si/download/479938.torrent</link>
+				<guid isPermaLink="true">https://nyaa.si/view/479938</guid>
+				<pubDate>Sat, 05 Oct 2013 13:33:00 -0000</pubDate>
+
+				<nyaa:seeders>0</nyaa:seeders>
+				<nyaa:leechers>0</nyaa:leechers>
+				<nyaa:downloads>0</nyaa:downloads>
+				<nyaa:infoHash>bbedfdaf118338edbf426e111a3b2621d7909caf</nyaa:infoHash>
+			<nyaa:categoryId>1_3</nyaa:categoryId>
+			<nyaa:category>Anime - Non-English-translated</nyaa:category>
+			<nyaa:size>25.1 MiB</nyaa:size>
+			<nyaa:comments>0</nyaa:comments>
+			<nyaa:trusted>No</nyaa:trusted>
+			<nyaa:remake>No</nyaa:remake>
+			<description><![CDATA[<a href="https://nyaa.si/view/479938">#479938 | Sakura Card Captors OP3 Abertura Dublada em Portugues</a> | 25.1 MiB | Anime - Non-English-translated | bbedfdaf118338edbf426e111a3b2621d7909caf]]></description>
+		</item>
+		<item>
+			<title>[www.yugioh-extremo.net] - Yu-Gi-Oh - Saga 7 - Dublada em Português (199-224)</title>
+				<link>https://nyaa.si/download/16359.torrent</link>
+				<guid isPermaLink="true">https://nyaa.si/view/16359</guid>
+				<pubDate>Mon, 23 Jun 2008 03:24:00 -0000</pubDate>
+
+				<nyaa:seeders>0</nyaa:seeders>
+				<nyaa:leechers>0</nyaa:leechers>
+				<nyaa:downloads>0</nyaa:downloads>
+				<nyaa:infoHash>6b3b545bab60c8b14fc448f37da6af18d353cf75</nyaa:infoHash>
+			<nyaa:categoryId>1_2</nyaa:categoryId>
+			<nyaa:category>Anime - English-translated</nyaa:category>
+			<nyaa:size>1.4 GiB</nyaa:size>
+			<nyaa:comments>0</nyaa:comments>
+			<nyaa:trusted>No</nyaa:trusted>
+			<nyaa:remake>No</nyaa:remake>
+			<description><![CDATA[<a href="https://nyaa.si/view/16359">#16359 | [www.yugioh-extremo.net] - Yu-Gi-Oh - Saga 7 - Dublada em Português (199-224)</a> | 1.4 GiB | Anime - English-translated | 6b3b545bab60c8b14fc448f37da6af18d353cf75]]></description>
+		</item>
+	</channel>
+</rss>

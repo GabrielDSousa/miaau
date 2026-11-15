@@ -1,0 +1,26 @@
+# Spike da Fase 0: valida se o Worker alcança o Nyaa e quanto custa.
+#
+# Depois do login (`npx wrangler login`):
+#   npx wrangler deploy
+#   curl https://miaau-spike.<subdominio>.workers.dev/diag
+#
+# D1 só entra quando houver banco criado (`npx wrangler d1 create miaau`):
+# descomente o bloco [[d1_databases]] e cole o database_id devolvido.
+
+name = "miaau-spike"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+
+workers_dev = true
+
+[observability]
+enabled = true
+
+[vars]
+NYAA_BASE = "https://nyaa.si"
+MIAU_CONTACT = "gabrielramos.email@gmail.com"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "miaau"
+database_id = "9d11ecec-fa67-4377-9149-9e5bc53fbd14"

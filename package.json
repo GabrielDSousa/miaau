@@ -1,0 +1,31 @@
+{
+  "name": "miaau",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Animes com áudio ou legenda em português, filtrados do RSS do Nyaa",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --test packages/core/test/*.test.ts packages/collector/test/*.test.ts scripts/test/*.test.mjs",
+    "check:secrets": "node scripts/scan-secrets.mjs",
+    "collect": "node scripts/collect-corpus.mjs",
+    "report": "node scripts/report.ts",
+    "sample": "node scripts/sample.ts",
+    "labels": "node scripts/make-labels.ts",
+    "eval": "node scripts/eval.ts",
+    "db:check": "node scripts/db-check.mjs",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "tail": "wrangler tail",
+    "miaau": "node scripts/miaau.ts",
+    "poll": "node scripts/miaau.ts poll",
+    "verify": "node scripts/miaau.ts verify",
+    "stats": "node scripts/miaau.ts stats",
+    "hooks": "node scripts/install-hooks.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.162.0"
+  }
+}

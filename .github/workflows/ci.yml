@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # `node:sqlite` e o type stripping de TypeScript exigem 22.18+.
+          node-version: "22"
+
+      # O projeto não tem dependências de runtime: nada de `npm install`.
+      - name: Testes
+        run: npm test
+
+      - name: Precisão contra o golden set
+        run: node scripts/eval.ts
+
+      - name: Schema em SQLite
+        run: node scripts/db-check.mjs
+
+      # Roda por último: falhar aqui é o mais grave, e o log fica no fim.
+      - name: Nenhum segredo versionado
+        run: npm run check:secrets
