@@ -353,6 +353,20 @@ test("BACKFILL_TERMS não inclui termos amplos e cobre as variantes medidas", ()
   assert.equal(new Set(BACKFILL_TERMS).size, BACKFILL_TERMS.length, "sem termos repetidos");
 });
 
+test("orçamento exato no fim da varredura não marca truncamento", async () => {
+  const fetcher = new FakeFetcher();
+  fetcher.add("PT-BR", 1, page([row(310, "[G] Anime - 01 [PT-BR]")], 1));
+
+  const remote = new FakeRemote();
+  const res = await runBackfill(
+    opts(fetcher, remote, { terms: ["PT-BR"], maxRequests: 1 }) as Parameters<typeof runBackfill>[0],
+  );
+
+  assert.equal(res.requests, 1);
+  assert.equal(res.truncated, false);
+  assert.deepEqual(res.terms[0].sweeps, ["desc"]);
+});
+
 test("BACKFILL_GROUPS não repete tags e evita termos que casam palavra comum", () => {
   assert.ok(BACKFILL_GROUPS.length >= 20);
   assert.ok(BACKFILL_GROUPS.includes("WF"));

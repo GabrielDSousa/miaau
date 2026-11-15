@@ -238,7 +238,6 @@ export async function runBackfill(opts: BackfillOptions): Promise<BackfillResult
 
       /** Varre uma direção até a última página, o teto ou o fim do orçamento. */
       const sweep = async (order: "asc" | "desc"): Promise<"done" | "error" | "budget"> => {
-        sweeps.push(order);
         for (let page = 1; page <= maxPages; page++) {
           if (result.requests >= budget) return "budget";
 
@@ -254,6 +253,8 @@ export async function runBackfill(opts: BackfillOptions): Promise<BackfillResult
             return "error";
           }
 
+          // Só conta a direção depois que a primeira página foi lida.
+          if (page === 1) sweeps.push(order);
           pages++;
           if (parsed.total !== null) total = parsed.total;
 
@@ -275,12 +276,13 @@ export async function runBackfill(opts: BackfillOptions): Promise<BackfillResult
 
       // Recentes primeiro: é a ponta que o RSS não alcança mais.
       const first = await sweep("desc");
+      let stopped = first === "budget";
       // Teto de 1000 significa que existe histórico além da janela recente.
-      if (first === "done" && dualSweep && total !== null && total >= SEARCH_CAP) {
-        await sweep("asc");
+      if (!stopped && first === "done" && dualSweep && total !== null && total >= SEARCH_CAP) {
+        stopped = (await sweep("asc")) === "budget";
       }
 
-      if (result.requests >= budget) result.truncated = true;
+      if (stopped) result.truncated = true;
 
       result.terms.push({ term: label, kind, found, pages, sweeps, total, error });
       result.seen += found;
