@@ -32,6 +32,9 @@ MIAU_CONTACT = "gabrielramos.email@gmail.com"
 GITHUB_REPO = "GabrielDSousa/miaau"
 GITHUB_WORKFLOW = "collect.yml"
 GITHUB_REF = "main"
+# Detalhes abertos por ciclo disparado pelo cron. O backfill encheu a fila de
+# verificação; 25 drena ~3.600/dia sem passar de ~30 s por execução.
+GITHUB_LIMIT = "25"
 
 # O agendador do GitHub Actions não disparou neste repositório, então quem
 # acorda a coleta é o cron da Cloudflare: a cada 10 min o Worker faz uma única

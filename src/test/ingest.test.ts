@@ -92,6 +92,11 @@ test("payload válido passa", () => {
   assert.deepEqual(errors, []);
 });
 
+test("release v0 é aceito: `01v0` existe em títulos antigos", () => {
+  const { errors } = validatePayload(payload([item({ version: 0, title: "[G] Anime - 01v0 [PT-BR]" })]));
+  assert.deepEqual(errors, []);
+});
+
 test("versão errada, enum inválido e confiança fora de faixa são recusados", () => {
   const { errors } = validatePayload({
     version: 999,
@@ -440,6 +445,39 @@ test("regra nova reabre item verificado com versão antiga", async () => {
     await handleIngest(payload([ambiguous], rules), db, NOW);
     const row = db.one<Record<string, unknown>>("SELECT * FROM torrents WHERE id = 8100");
     assert.equal(row.pt_kind, "unknown", "título volta a mandar quando as regras mudam");
+    assert.equal(row.needs_verification, 1);
+  } finally {
+    db.close();
+  }
+});
+
+test("regra nova também enfileira candidato que nunca foi verificado", async () => {
+  const db = new FakeD1();
+  try {
+    // A versão antiga não pedia verificação para este candidato; sem a regra
+    // nova ele ficaria invisível para sempre.
+    await handleIngest(
+      payload([
+        item({
+          id: 8150,
+          infoHash: "b4".repeat(20),
+          status: "candidate",
+          ptKind: "sub",
+          ptVariant: "unknown",
+          confidence: 0.72,
+          needsVerification: false,
+        }),
+      ]),
+      db,
+      NOW,
+    );
+
+    const queue = await handleQueue(db, 10, NOW, 4);
+    assert.equal(queue.jobs.length, 1);
+    assert.equal(queue.jobs[0].torrentId, 8150);
+    assert.equal(queue.jobs[0].reason, "recheck-regras");
+
+    const row = db.one<Record<string, unknown>>("SELECT needs_verification FROM torrents WHERE id = 8150");
     assert.equal(row.needs_verification, 1);
   } finally {
     db.close();

@@ -17,3 +17,4 @@ export {
 } from "./parse-description.ts";
 export { LANG_PATTERNS, DUB_WORDS, SUB_WORDS, MULTI_AUDIO, MULTI_SUB } from "./language.ts";
 export { parseRss, parseDetailPage, type RssItem } from "./parse-rss.ts";
+export { parseSearchPage, type SearchPage } from "./parse-search.ts";

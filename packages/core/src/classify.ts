@@ -444,8 +444,10 @@ export function classifyTitle(title: string, opts: ClassifyOptions = {}): Classi
     score = 0.62;
     needsVerification = true;
   } else {
-    // variante desconhecida, mas o tipo está claro no título
+    // variante desconhecida, mas o tipo está claro no título: "Legendado" ou
+    // "Portuguese subs" pode ser BR ou PT, e só a descrição distingue.
     score = 0.72;
+    needsVerification = true;
   }
 
   // Tipo deduzido só do perfil do grupo (ex.: grupo publica dublado E legendado):

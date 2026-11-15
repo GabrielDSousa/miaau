@@ -103,7 +103,8 @@ export function validateItem(raw: unknown, index: number): ValidationResult {
   for (const f of ["sizeBytes"] as const) {
     if (!isOptInt(it[f], 0)) at(`${f} inválido`);
   }
-  if (!isInt(it.version, 1)) at("version inválido");
+  // `v0` é um release real (pré-lançamento) e aparece em títulos antigos.
+  if (!isInt(it.version, 0)) at("version inválido");
   for (const f of ["seeders", "leechers", "downloads"] as const) {
     if (!isInt(it[f], 0)) at(`${f} inválido`);
   }
@@ -341,9 +342,29 @@ SELECT id, 'recheck-regras', 0.5, 0, ?, ?
    AND COALESCE(verify_version, 0) < ?
 ON CONFLICT(torrent_id) DO NOTHING`;
 
+/**
+ * Candidato nunca verificado também entra na fila quando as regras mudam.
+ *
+ * Sem isso, um candidato que a versão antiga considerava "não precisa abrir"
+ * ficaria parado para sempre: ele não aparece no site (não é confirmado) e não
+ * está na fila. A mudança de regra é a única chance de reavaliá-lo.
+ */
+const ENQUEUE_OUTDATED_CANDIDATES = `
+INSERT INTO verify_queue (torrent_id, reason, priority, attempts, next_attempt_at, created_at)
+SELECT id, 'recheck-regras', 0.6, 0, ?, ?
+  FROM torrents
+ WHERE hidden = 0
+   AND status = 'candidate'
+   AND verified_at IS NULL
+ON CONFLICT(torrent_id) DO NOTHING`;
+
 const MARK_OUTDATED = `
 UPDATE torrents SET needs_verification = 1
- WHERE hidden = 0 AND verified_at IS NOT NULL AND COALESCE(verify_version, 0) < ?`;
+ WHERE hidden = 0
+   AND (
+     (verified_at IS NOT NULL AND COALESCE(verify_version, 0) < ?)
+     OR (status = 'candidate' AND verified_at IS NULL)
+   )`;
 
 const RULES_VERSION_KEY = "rules:version";
 
@@ -561,6 +582,7 @@ export async function handleQueue(
     if (lastSeen !== String(ruleVersion)) {
       await db.batch([
         db.prepare(REENQUEUE_OUTDATED).bind(nowIso, nowIso, ruleVersion),
+        db.prepare(ENQUEUE_OUTDATED_CANDIDATES).bind(nowIso, nowIso),
         db.prepare(MARK_OUTDATED).bind(ruleVersion),
         db.prepare(UPSERT_POLL_STATE).bind(RULES_VERSION_KEY, String(ruleVersion), nowIso),
       ]);

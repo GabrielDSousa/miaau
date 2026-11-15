@@ -28,10 +28,12 @@
 | Coleta por disparo manual | ✅ funcionando | um ciclo completo leva ~15 s |
 | Interface web | ✅ funcionando | sem build, sem framework; uma requisição por página |
 | Busca e filtros | ✅ funcionando | abas PT-BR/PT-PT, dublado/legendado e busca por título ou grupo |
-| Histórico completo (backfill) | 🚧 planejado | hoje só a janela dos 75 itens do RSS |
+| Histórico (backfill) | ✅ inicial | 8 termos de busca, até 1.000 resultados cada; não é o arquivo completo |
 
 Primeira execução automática confirmada em 15/11/2026 às 22:10 UTC, sem
-intervenção manual.
+intervenção manual. Em 15/11/2026 o catálogo tinha **3.400 torrents**, sendo
+**1.075 confirmados** com português — 964 na aba PT-BR e 116 na PT-PT. Os
+candidatos restantes entram na fila de verificação aos poucos.
 
 ## O que é o Miaau
 
@@ -47,6 +49,7 @@ O Miaau faz esse trabalho de forma contínua:
 - **Verifica** os casos ambíguos ("Multi-Subs", "Dual Audio") abrindo a página do
   torrent e lendo a descrição.
 - **Guarda** a evidência de cada decisão, com uma nota de confiança.
+- **Recupera** o histórico com buscas semeadas por idioma, sem varrer o Nyaa inteiro.
 - **Publica** um catálogo incremental: a primeira carga é grande, as seguintes
   só atualizam o que mudou.
 
@@ -62,6 +65,7 @@ conteúdo adulto.
 - catálogo persistido, com atualização incremental e fila de verificação;
 - coleta executada em runner efêmero, sem estado local;
 - API de ingestão autenticada e idempotente;
+- backfill do histórico por busca HTML, com fila de verificação incremental;
 - site público com abas PT-BR/PT-PT, filtro por dublado/legendado e busca.
 
 ## Ferramentas utilizadas

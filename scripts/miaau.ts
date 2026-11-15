@@ -11,6 +11,10 @@
  *
  * Na nuvem (sem estado, fala com o Worker):
  *   node --env-file-if-exists=.env scripts/miaau.ts cycle --limit 10
+ *   node --env-file-if-exists=.env scripts/miaau.ts backfill --pages 14
+ *
+ * `backfill` varre a busca HTML (histórico) e não abre detalhes; os candidatos
+ * entram na fila e drenam no `cycle`.
  *
  * Variáveis:
  *   MIAU_DB            caminho do SQLite      (padrão: data/miaau.db)
@@ -31,6 +35,7 @@ import {
   createRemote,
   miaauUserAgent,
   pollOnce,
+  runBackfill,
   runCycle,
   verifyBatch,
   Store,
@@ -39,7 +44,7 @@ import {
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SCHEMA = join(ROOT, "db", "schema.sql");
-const RULE_VERSION = 3;
+const RULE_VERSION = 4;
 
 const args = process.argv.slice(2);
 const cmd = args[0] ?? "stats";
@@ -223,27 +228,33 @@ async function watch(store: Store, fetcher: Fetcher): Promise<void> {
  * Não abre SQLite: lê a fila do Worker, busca o feed, verifica o que está na
  * fila e devolve tudo num POST. O `--limit` é quantos detalhes abrir.
  */
-async function cycle(fetcher: Fetcher): Promise<void> {
+function makeRemote(cmdName: string) {
   const baseUrl = flag("url") ?? process.env.MIAU_INGEST_URL;
   const token = process.env.MIAU_INGEST_TOKEN;
   if (!baseUrl) {
-    console.error("cycle: defina MIAU_INGEST_URL (base do Worker)");
+    console.error(`${cmdName}: defina MIAU_INGEST_URL (base do Worker)`);
     process.exitCode = 2;
-    return;
+    return null;
   }
   if (!token) {
     // Só o nome da variável na mensagem: nunca o valor.
-    console.error("cycle: defina MIAU_INGEST_TOKEN (secret do repositório)");
+    console.error(`${cmdName}: defina MIAU_INGEST_TOKEN (secret do repositório)`);
     process.exitCode = 2;
-    return;
+    return null;
   }
 
-  const limit = Number(flag("limit") ?? 10);
-  const remote = createRemote({
+  return createRemote({
     baseUrl,
     token,
     warn: (m) => console.error(`  ! ${m}`),
   });
+}
+
+async function cycle(fetcher: Fetcher): Promise<void> {
+  const remote = makeRemote("cycle");
+  if (!remote) return;
+
+  const limit = Number(flag("limit") ?? 10);
 
   const t0 = Date.now();
   const r = await runCycle({
@@ -272,8 +283,51 @@ async function cycle(fetcher: Fetcher): Promise<void> {
   if (!r.ok) process.exitCode = 1;
 }
 
-/** `cycle` não toca no SQLite local; o resto sim. */
-const NEEDS_STORE = cmd !== "cycle";
+/**
+ * Backfill histórico a partir da busca HTML.
+ *
+ * Leve de propósito: só lê páginas de resultado e grava o que o título já diz.
+ * Os candidatos entram na fila e são abertos pelo ciclo normal.
+ */
+async function backfill(fetcher: Fetcher): Promise<void> {
+  const remote = makeRemote("backfill");
+  if (!remote) return;
+
+  const terms = flag("terms")
+    ?.split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+  const maxPages = Number(flag("pages") ?? 14);
+
+  const t0 = Date.now();
+  const r = await runBackfill({
+    remote,
+    fetcher,
+    now: () => new Date(),
+    terms,
+    maxPages,
+    ruleVersion: RULE_VERSION,
+    log: (m) => console.log(`  ${m}`),
+  });
+
+  console.log(
+    `backfill  ${r.ok ? "ok" : "FALHOU"}  termos=${r.terms.length} ` +
+      `visto=${r.seen} duplicado=${r.duplicates} enviado=${r.sent} ` +
+      `gravado=${r.written} fila+=${r.queued}`,
+  );
+  console.log(
+    `          só-título: confirmado=${r.byStatus.confirmed ?? 0} ` +
+      `candidato=${r.byStatus.candidate ?? 0} descartado=${r.byStatus.rejected ?? 0}`,
+  );
+  console.log(`          ingest ${r.ingestMs} ms   total ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+  for (const e of r.errors.slice(0, 10)) console.error(`  ! ${e}`);
+  if (r.errors.length > 10) console.error(`  ! … mais ${r.errors.length - 10} erro(s)`);
+
+  if (!r.ok) process.exitCode = 1;
+}
+
+/** `cycle` e `backfill` não tocam no SQLite local; o resto sim. */
+const NEEDS_STORE = cmd !== "cycle" && cmd !== "backfill";
 const fetcher = makeFetcher();
 const store = NEEDS_STORE ? openStore() : null;
 
@@ -291,6 +345,9 @@ try {
     case "cycle":
       await cycle(fetcher);
       break;
+    case "backfill":
+      await backfill(fetcher);
+      break;
     case "recheck":
       recheck(store!);
       break;
@@ -302,7 +359,7 @@ try {
       break;
     default:
       console.error(`comando desconhecido: ${cmd}`);
-      console.error("use: poll | verify | watch | cycle | recheck | stats | rules");
+      console.error("use: poll | verify | watch | cycle | backfill | recheck | stats | rules");
       process.exitCode = 2;
   }
 } finally {

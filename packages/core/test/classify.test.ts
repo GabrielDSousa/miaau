@@ -269,6 +269,19 @@ test("Multi-Subs sem idioma declarado pede verificação", () => {
   assert.equal(r.needsVerification, true);
 });
 
+test("tipo claro mas variante desconhecida também pede verificação", () => {
+  for (const title of [
+    "[PA] Kurokami - 16 (portuguese subs)",
+    "Tegami Bachi - Letter Bee - 13 - Legendado - [720p].mkv",
+  ]) {
+    const r = classifyTitle(title);
+    assert.equal(r.ptKind, "sub", title);
+    assert.equal(r.ptVariant, "unknown", title);
+    assert.equal(r.status, "candidate", title);
+    assert.equal(r.needsVerification, true, title);
+  }
+});
+
 test("Multi-Subs com PT-BR declarado confirma legenda", () => {
   const r = classifyTitle("[ToonsHub] Algum Anime S01E01 (Multi-Subs) [PT-BR]");
   assert.equal(r.ptKind, "sub");

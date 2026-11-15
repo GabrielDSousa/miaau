@@ -8,6 +8,7 @@ export { Store, parseSize, verifyPriority, verifyReason, type PollState, type St
 export { toIngestItem, type BuildItemOptions } from "./item.ts";
 export { createRemote, remoteBase, RemoteError, type Remote, type RemoteOptions } from "./remote.ts";
 export { runCycle, type CycleOptions, type CycleResult } from "./cycle.ts";
+export { runBackfill, BACKFILL_TERMS, type BackfillOptions, type BackfillResult, type TermResult } from "./backfill.ts";
 export {
   ingestRss,
   pollOnce,
