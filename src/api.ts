@@ -22,6 +22,8 @@ export interface TorrentListItem {
   confidence: number;
   verified: boolean;
   langs: string[];
+  /** Por que o classificador decidiu isso. Texto curto, exibido no site. */
+  evidence: string[];
 }
 
 export interface ListQuery {
@@ -141,6 +143,17 @@ function parseLangs(raw: unknown): string[] {
   }
 }
 
+function parseEvidence(raw: unknown): string[] {
+  if (typeof raw !== "string" || !raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((e): e is string => typeof e === "string").slice(0, 20);
+  } catch {
+    return [];
+  }
+}
+
 function toItem(row: Record<string, unknown>): TorrentListItem {
   return {
     id: Number(row.id),
@@ -158,6 +171,7 @@ function toItem(row: Record<string, unknown>): TorrentListItem {
     confidence: Number(row.confidence ?? 0),
     verified: row.verified_at !== null && row.verified_at !== undefined,
     langs: parseLangs(row.description_langs),
+    evidence: parseEvidence(row.evidence),
   };
 }
 
@@ -175,7 +189,7 @@ export async function listTorrents(db: QueryDb, query: ListQuery): Promise<ListR
     .prepare(
       `SELECT id, title, title_clean, group_name, season, episode, resolution,
               size_bytes, seeders, published_at, pt_kind, pt_variant, confidence,
-              verified_at, description_langs
+              verified_at, description_langs, evidence
          FROM torrents
         WHERE ${where.sql}
         ORDER BY published_at DESC, id DESC

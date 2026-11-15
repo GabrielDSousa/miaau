@@ -30,6 +30,7 @@ import {
 } from "./ingest.ts";
 import { dispatchCollection, type DispatchEnv } from "./dispatch.ts";
 import { catalogStats, listTorrents, parseListQuery, type QueryDb } from "./api.ts";
+import { buildFeed } from "./feed.ts";
 import { APP_JS, PAGE_HTML, STYLE_CSS } from "./web.ts";
 
 interface Env extends IngestEnv, DispatchEnv {
@@ -112,7 +113,12 @@ export default {
         return json({
           service: "miaau",
           version: 1,
-          routes: ["/api/torrents?variant=br|pt&kind=all|dub|sub&q=&page=1", "/api/stats", "/diag"],
+          routes: [
+            "/api/torrents?variant=br|pt&kind=all|dub|sub&q=&page=1",
+            "/api/stats",
+            "/feed.xml?variant=br|pt&kind=all|dub|sub",
+            "/diag",
+          ],
         });
       }
 
@@ -126,6 +132,18 @@ export default {
         const query = parseListQuery(url);
         const result = await listTorrents(env.DB as unknown as QueryDb, query);
         return json(result, 200, { "cache-control": "public, max-age=120" });
+      }
+
+      if (route === "/feed.xml") {
+        if (!env.DB) return json({ error: "binding DB ausente no wrangler.toml" }, 503);
+        const query = parseListQuery(url);
+        const result = await listTorrents(env.DB as unknown as QueryDb, { ...query, page: 1, per: 50 });
+        const feed = buildFeed(result.items, {
+          siteUrl: url.origin,
+          variant: query.variant ?? "br",
+          kind: query.kind,
+        });
+        return asset(feed, "application/rss+xml; charset=utf-8");
       }
 
       // ------------------------------------------------ ponte de ingestão

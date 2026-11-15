@@ -24,6 +24,7 @@ interface Row {
   seeders?: number;
   size?: number | null;
   langs?: string | null;
+  evidence?: string;
 }
 
 const NOW = "2026-11-15T12:00:00.000Z";
@@ -37,7 +38,7 @@ function insert(db: FakeD1, row: Row): void {
           seeders, leechers, downloads, published_at, first_seen_at, last_seen_at,
           pt_kind, pt_variant, status, confidence, evidence, needs_verification,
           verified_at, verify_version, description_langs, hidden)
-       VALUES (?,?,?,?,?,?,?,?,?,0,0,?,?,?,?,?,?,?, '[]', 0, ?, 3, ?, ?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,0,0,?,?,?,?,?,?,?,?,0,?,3,?,?)`,
     )
     .run(
       row.id,
@@ -56,6 +57,7 @@ function insert(db: FakeD1, row: Row): void {
       row.variant ?? "br",
       row.status ?? "confirmed",
       0.9,
+      row.evidence ?? "[]",
       row.status === "rejected" ? null : NOW,
       row.langs ?? null,
       row.hidden ?? 0,
@@ -210,6 +212,7 @@ test("item devolve os campos que a interface usa", async () => {
       seeders: 42,
       size: 2_147_483_648,
       langs: JSON.stringify({ audio: ["pt:br"], subs: ["pt:br", "en"], hasAudioSection: true }),
+      evidence: JSON.stringify({ not: "array" }),
     });
 
     const res = await listTorrents(db, parseListQuery(query({ variant: "br" })));
@@ -221,6 +224,19 @@ test("item devolve os campos que a interface usa", async () => {
     assert.equal(item.verified, true);
     assert.ok(item.langs.includes("a:pt:br"));
     assert.ok(item.langs.includes("s:en"));
+    assert.deepEqual(item.evidence, [], "evidência malformada não derruba a listagem");
+  });
+});
+
+test("evidência válida chega como lista de textos", async () => {
+  await withDb(async (db) => {
+    insert(db, {
+      id: 51,
+      evidence: JSON.stringify(['título: "pt-br"', 'grupo: "WF" → sub', 42]),
+    });
+
+    const res = await listTorrents(db, parseListQuery(query({ variant: "br" })));
+    assert.deepEqual(res.items[0].evidence, ['título: "pt-br"', 'grupo: "WF" → sub']);
   });
 });
 

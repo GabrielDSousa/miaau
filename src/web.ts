@@ -19,6 +19,8 @@ export const PAGE_HTML = `<!doctype html>
 <meta name="description" content="Índice de animes com áudio ou legenda em português, filtrado do feed público do Nyaa. PT-BR e PT-PT em abas separadas.">
 <meta name="color-scheme" content="dark">
 <link rel="stylesheet" href="/style.css">
+<link rel="alternate" type="application/rss+xml" title="Miaau — PT-BR" href="/feed.xml?variant=br">
+<link rel="alternate" type="application/rss+xml" title="Miaau — PT-PT" href="/feed.xml?variant=pt">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%90%B1%3C/text%3E%3C/svg%3E">
 </head>
 <body>
@@ -55,7 +57,7 @@ export const PAGE_HTML = `<!doctype html>
 
 <footer class="wrap foot">
   <p>O Miaau indexa apenas metadados públicos e aponta para a página original no Nyaa — não hospeda arquivos.</p>
-  <p class="muted">A classificação é automática e pode errar. <a href="https://github.com/GabrielDSousa/miaau" rel="noopener">Código e correções no GitHub</a>.</p>
+  <p class="muted">A classificação é automática e pode errar. <a href="https://github.com/GabrielDSousa/miaau" rel="noopener">Código e correções no GitHub</a> · <a href="/feed.xml?variant=br">RSS</a>.</p>
 </footer>
 
 <script src="/app.js"></script>
@@ -192,6 +194,13 @@ button[aria-pressed="true"]:hover { color: #16180f; background: var(--accent); }
 .badge.kind { color: var(--accent); border-color: var(--accent-soft); }
 .badge.verified { color: var(--good); border-color: #26301f; }
 .badge.lang { text-transform: none; letter-spacing: 0; color: var(--ink-faint); }
+.badge.conf { text-transform: none; letter-spacing: 0; }
+
+.why { margin-top: 0.55rem; font-size: 0.8rem; color: var(--ink-faint); }
+.why summary { cursor: pointer; width: fit-content; }
+.why summary:hover { color: var(--ink-dim); }
+.why ul { margin: 0.35rem 0 0; padding-left: 1.1rem; }
+.why li { margin: 0.1rem 0; }
 
 .more { margin: 1.5rem 0 3rem; text-align: center; }
 .more button { border: 1px solid var(--line); border-radius: 0.5rem; }
@@ -302,6 +311,7 @@ export const APP_JS = String.raw`(function () {
     var badges = el("div", "badges");
     badges.appendChild(el("span", "badge kind", kindLabel(item.kind)));
     badges.appendChild(el("span", "badge", variantLabel(item.variant, state.variant === "br" ? "PT-BR" : "PT-PT")));
+    badges.appendChild(el("span", "badge conf", Math.round((item.confidence || 0) * 100) + "% de confiança"));
     if (item.verified) badges.appendChild(el("span", "badge verified", "verificado"));
 
     var unknown = [];
@@ -317,6 +327,15 @@ export const APP_JS = String.raw`(function () {
       badges.appendChild(el("span", "badge lang", unknown[k]));
     }
     li.appendChild(badges);
+
+    if (item.evidence && item.evidence.length) {
+      var why = el("details", "why");
+      why.appendChild(el("summary", null, "por que?"));
+      var ul = el("ul");
+      for (var w = 0; w < item.evidence.length; w++) ul.appendChild(el("li", null, item.evidence[w]));
+      why.appendChild(ul);
+      li.appendChild(why);
+    }
 
     return li;
   }

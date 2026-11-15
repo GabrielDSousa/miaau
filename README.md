@@ -12,6 +12,7 @@
 | Site | <https://miaau-spike.miaau.workers.dev> |
 | Repositório | <https://github.com/GabrielDSousa/miaau> |
 | API (JSON) | <https://miaau-spike.miaau.workers.dev/api/stats> |
+| Feed RSS (PT-BR) | <https://miaau-spike.miaau.workers.dev/feed.xml?variant=br> |
 | Diagnóstico da API | <https://miaau-spike.miaau.workers.dev/diag> |
 
 > O endereço `*.workers.dev` pode não resolver em algumas redes (erro de TLS).
@@ -28,6 +29,7 @@
 | Coleta por disparo manual | ✅ funcionando | um ciclo completo leva ~15 s |
 | Interface web | ✅ funcionando | sem build, sem framework; uma requisição por página |
 | Busca e filtros | ✅ funcionando | abas PT-BR/PT-PT, dublado/legendado e busca por título ou grupo |
+| Feed RSS | ✅ funcionando | 50 itens mais recentes, por variante e tipo |
 | Histórico (backfill) | ✅ inicial | 8 termos de busca, até 1.000 resultados cada; não é o arquivo completo |
 
 Primeira execução automática confirmada em 15/11/2026 às 22:10 UTC, sem
@@ -66,7 +68,8 @@ conteúdo adulto.
 - coleta executada em runner efêmero, sem estado local;
 - API de ingestão autenticada e idempotente;
 - backfill do histórico por busca HTML, com fila de verificação incremental;
-- site público com abas PT-BR/PT-PT, filtro por dublado/legendado e busca.
+- site público com abas PT-BR/PT-PT, filtro por dublado/legendado e busca;
+- feed RSS por variante e tipo, além da API JSON.
 
 ## Ferramentas utilizadas
 
