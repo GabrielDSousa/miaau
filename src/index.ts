@@ -113,6 +113,20 @@ export default {
         return asset(APP_JS, "text/javascript; charset=utf-8");
       }
 
+      if (route === "/robots.txt") {
+        return asset(`User-agent: *\nAllow: /\nSitemap: ${url.origin}/sitemap.xml\n`, "text/plain; charset=utf-8");
+      }
+
+      if (route === "/sitemap.xml") {
+        const pages = ["/", "/como-funciona"];
+        const body =
+          `<?xml version="1.0" encoding="utf-8"?>\n` +
+          `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+          pages.map((p) => `  <url><loc>${url.origin}${p}</loc></url>`).join("\n") +
+          `\n</urlset>\n`;
+        return asset(body, "application/xml; charset=utf-8");
+      }
+
       if (route === "/api") {
         return json({
           service: "miaau",

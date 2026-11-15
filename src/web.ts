@@ -604,6 +604,47 @@ export const APP_JS = String.raw`(function () {
     return qs.toString();
   }
 
+  // O estado vive na URL para o filtro ser compartilhável. page fica fora:
+  // recarregar volta ao começo, não no meio de um "carregar mais".
+  function writeUrl() {
+    var qs = new URLSearchParams();
+    if (state.variant !== "br") qs.set("variant", state.variant);
+    if (state.kind !== "all") qs.set("kind", state.kind);
+    if (state.sort !== "recent") qs.set("sort", state.sort);
+    if (state.q) qs.set("q", state.q);
+    if (state.view !== "items") qs.set("view", state.view);
+    if (state.series) qs.set("series", state.series);
+    var query = qs.toString();
+    history.replaceState(null, "", query ? "/?" + query : "/");
+  }
+
+  function initFromUrl() {
+    var qs = new URLSearchParams(location.search);
+    var variant = qs.get("variant");
+    if (variant === "br" || variant === "pt") state.variant = variant;
+    var kind = qs.get("kind");
+    if (kind === "all" || kind === "dub" || kind === "sub") state.kind = kind;
+    var order = qs.get("sort");
+    if (order === "recent" || order === "seeders" || order === "confidence" || order === "size") state.sort = order;
+    var view = qs.get("view");
+    if (view === "items" || view === "series") state.view = view;
+    var q = qs.get("q");
+    if (q) {
+      state.q = q.slice(0, 80);
+      search.value = state.q;
+    }
+    var series = qs.get("series");
+    if (series) {
+      state.series = series;
+      state.view = "items";
+    }
+    sort.value = state.sort;
+    syncPressed("[data-variant]", "data-variant", state.variant);
+    syncPressed("[data-kind]", "data-kind", state.kind);
+    syncPressed("[data-view]", "data-view", state.view);
+    showSeries(state.series);
+  }
+
   function grouped() {
     return state.view === "series" && !state.series;
   }
@@ -611,6 +652,7 @@ export const APP_JS = String.raw`(function () {
   function load(page, append) {
     var mine = ++seq;
     if (!append) {
+      writeUrl();
       list.textContent = "";
       status.textContent = "carregando…";
       status.className = "status";
@@ -633,6 +675,9 @@ export const APP_JS = String.raw`(function () {
         for (var i = 0; i < data.items.length; i++) {
           list.appendChild(grouping ? seriesCard(data.items[i]) : card(data.items[i]));
         }
+
+        // Ao abrir por link direto, a barra mostra o nome legível, não a chave.
+        if (state.series && !grouping && data.items.length) showSeries(data.items[0].series);
 
         if (!data.total) {
           if (state.q) {
@@ -741,6 +786,7 @@ export const APP_JS = String.raw`(function () {
     load(1, false);
   });
 
+  initFromUrl();
   stats();
   load(1, false);
 })();

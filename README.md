@@ -33,6 +33,8 @@
 | Busca e filtros | ✅ funcionando | abas PT-BR/PT-PT, dublado/legendado, busca por título ou grupo e ordenação |
 | Visão por série | ✅ funcionando | agrupa os títulos por série, com contagem, faixa de episódios e atalho para os itens |
 | Correção por item | ✅ funcionando | cada card tem um link que abre uma issue já preenchida com o torrent |
+| Links compartilháveis | ✅ funcionando | aba, tipo, busca, ordem e série ficam na URL |
+| Indexação | ✅ básico | `robots.txt` e `sitemap.xml` com as páginas públicas |
 | Feed RSS | ✅ funcionando | 50 itens mais recentes, por variante e tipo |
 | Histórico (backfill) | ✅ inicial | 8 termos de busca, até 1.000 resultados cada; não é o arquivo completo |
 
@@ -75,6 +77,7 @@ conteúdo adulto.
 - site público com abas PT-BR/PT-PT, filtro por dublado/legendado e busca;
 - visão por série, agrupando episódios e lotes do mesmo anime;
 - selo de novidade e link de correção em cada card;
+- filtros e série refletidos na URL, para compartilhar um recorte;
 - feed RSS por variante e tipo, além da API JSON.
 
 ## Ferramentas utilizadas
