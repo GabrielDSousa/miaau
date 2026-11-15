@@ -35,6 +35,7 @@
 | Correção por item | ✅ funcionando | cada card tem um link que abre uma issue já preenchida com o torrent |
 | Links compartilháveis | ✅ funcionando | aba, tipo, busca, ordem e série ficam na URL |
 | Indexação | ✅ básico | `robots.txt` e `sitemap.xml` com as páginas públicas |
+| Cache de borda | ✅ funcionando | leituras públicas guardadas no Cache API, com TTL curto |
 | Feed RSS | ✅ funcionando | 50 itens mais recentes, por variante e tipo |
 | Histórico (backfill) | ✅ inicial | 8 termos de busca, até 1.000 resultados cada; não é o arquivo completo |
 

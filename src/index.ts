@@ -67,6 +67,48 @@ const json = (data: unknown, status = 200, extra: Record<string, string> = {}): 
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...extra },
   });
 
+interface EdgeCache {
+  match(req: Request): Promise<Response | undefined>;
+  put(req: Request, res: Response): Promise<void>;
+}
+
+function edgeCache(): EdgeCache | undefined {
+  return (globalThis as { caches?: { default?: EdgeCache } }).caches?.default;
+}
+
+/**
+ * Cache de borda para leitura pública.
+ *
+ * O Worker é executado em toda requisição; sem o Cache API cada visita vira
+ * leitura no D1. Aqui a resposta pronta é guardada pelo próprio Cloudflare, e
+ * o TTL vem do `cache-control` que cada rota já define.
+ *
+ * Falhar no cache nunca falha a resposta: ele é otimização, não dependência.
+ */
+async function withCache(request: Request, build: () => Promise<Response>): Promise<Response> {
+  const store = edgeCache();
+  if (!store) return build();
+
+  const hit = await store.match(request);
+  if (hit) {
+    // Cabeçalho só na resposta servida do cache; a cópia guardada continua
+    // limpa para não envelhecer com o rótulo errado.
+    const headers = new Headers(hit.headers);
+    headers.set("x-miaau-cache", "hit");
+    return new Response(hit.body, { status: hit.status, headers });
+  }
+
+  const res = await build();
+  if (res.status === 200 && request.method === "GET") {
+    try {
+      await store.put(request, res.clone());
+    } catch {
+      // resposta não cacheável (por exemplo, no-store) segue normalmente
+    }
+  }
+  return res;
+}
+
 function ua(env: Env): string {
   return `Miaau-spike/0.1 (+${env.MIAU_CONTACT})`;
 }
@@ -98,78 +140,98 @@ export default {
 
     try {
       if (route === "/" || route === "/index.html") {
-        return new Response(PAGE_HTML, { headers: HTML_HEADERS });
+        return withCache(request, async () => new Response(PAGE_HTML, { headers: HTML_HEADERS }));
       }
 
       if (route === "/como-funciona") {
-        return new Response(ABOUT_HTML, { headers: HTML_HEADERS });
+        return withCache(request, async () => new Response(ABOUT_HTML, { headers: HTML_HEADERS }));
       }
 
       if (route === "/style.css") {
-        return asset(STYLE_CSS, "text/css; charset=utf-8");
+        return withCache(request, async () => asset(STYLE_CSS, "text/css; charset=utf-8"));
       }
 
       if (route === "/app.js") {
-        return asset(APP_JS, "text/javascript; charset=utf-8");
+        return withCache(request, async () => asset(APP_JS, "text/javascript; charset=utf-8"));
       }
 
       if (route === "/robots.txt") {
-        return asset(`User-agent: *\nAllow: /\nSitemap: ${url.origin}/sitemap.xml\n`, "text/plain; charset=utf-8");
+        return withCache(request, async () =>
+          asset(`User-agent: *\nAllow: /\nSitemap: ${url.origin}/sitemap.xml\n`, "text/plain; charset=utf-8"),
+        );
       }
 
       if (route === "/sitemap.xml") {
-        const pages = ["/", "/como-funciona"];
-        const body =
-          `<?xml version="1.0" encoding="utf-8"?>\n` +
-          `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
-          pages.map((p) => `  <url><loc>${url.origin}${p}</loc></url>`).join("\n") +
-          `\n</urlset>\n`;
-        return asset(body, "application/xml; charset=utf-8");
+        return withCache(request, async () => {
+          const pages = ["/", "/como-funciona"];
+          const body =
+            `<?xml version="1.0" encoding="utf-8"?>\n` +
+            `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+            pages.map((p) => `  <url><loc>${url.origin}${p}</loc></url>`).join("\n") +
+            `\n</urlset>\n`;
+          return asset(body, "application/xml; charset=utf-8");
+        });
       }
 
       if (route === "/api") {
-        return json({
-          service: "miaau",
-          version: 1,
-          routes: [
-            "/api/torrents?variant=br|pt&kind=all|dub|sub&sort=recent|seeders|confidence|size&q=&series=&page=1",
-            "/api/series?variant=br|pt&kind=all|dub|sub&sort=recent|seeders|confidence|size&q=&page=1",
-            "/api/stats",
-            "/feed.xml?variant=br|pt&kind=all|dub|sub",
-            "/diag",
-          ],
-        });
+        return withCache(request, async () =>
+          json(
+            {
+              service: "miaau",
+              version: 1,
+              routes: [
+                "/api/torrents?variant=br|pt&kind=all|dub|sub&sort=recent|seeders|confidence|size&q=&series=&page=1",
+                "/api/series?variant=br|pt&kind=all|dub|sub&sort=recent|seeders|confidence|size&q=&page=1",
+                "/api/stats",
+                "/feed.xml?variant=br|pt&kind=all|dub|sub",
+                "/diag",
+              ],
+            },
+            200,
+            { "cache-control": "public, max-age=300" },
+          ),
+        );
       }
 
       if (route === "/api/stats") {
-        if (!env.DB) return json({ error: "binding DB ausente no wrangler.toml" }, 503);
-        return json(await catalogStats(env.DB as unknown as QueryDb));
+        return withCache(request, async () => {
+          if (!env.DB) return json({ error: "binding DB ausente no wrangler.toml" }, 503);
+          return json(await catalogStats(env.DB as unknown as QueryDb), 200, {
+            "cache-control": "public, max-age=120",
+          });
+        });
       }
 
       if (route === "/api/torrents") {
-        if (!env.DB) return json({ error: "binding DB ausente no wrangler.toml" }, 503);
-        const query = parseListQuery(url);
-        const result = await listTorrents(env.DB as unknown as QueryDb, query);
-        return json(result, 200, { "cache-control": "public, max-age=120" });
+        return withCache(request, async () => {
+          if (!env.DB) return json({ error: "binding DB ausente no wrangler.toml" }, 503);
+          const query = parseListQuery(url);
+          const result = await listTorrents(env.DB as unknown as QueryDb, query);
+          return json(result, 200, { "cache-control": "public, max-age=120" });
+        });
       }
 
       if (route === "/api/series") {
-        if (!env.DB) return json({ error: "binding DB ausente no wrangler.toml" }, 503);
-        const query = parseListQuery(url);
-        const result = await listSeries(env.DB as unknown as QueryDb, query);
-        return json(result, 200, { "cache-control": "public, max-age=120" });
+        return withCache(request, async () => {
+          if (!env.DB) return json({ error: "binding DB ausente no wrangler.toml" }, 503);
+          const query = parseListQuery(url);
+          const result = await listSeries(env.DB as unknown as QueryDb, query);
+          return json(result, 200, { "cache-control": "public, max-age=120" });
+        });
       }
 
       if (route === "/feed.xml") {
-        if (!env.DB) return json({ error: "binding DB ausente no wrangler.toml" }, 503);
-        const query = parseListQuery(url);
-        const result = await listTorrents(env.DB as unknown as QueryDb, { ...query, page: 1, per: 50 });
-        const feed = buildFeed(result.items, {
-          siteUrl: url.origin,
-          variant: query.variant ?? "br",
-          kind: query.kind,
+        return withCache(request, async () => {
+          if (!env.DB) return json({ error: "binding DB ausente no wrangler.toml" }, 503);
+          const query = parseListQuery(url);
+          const result = await listTorrents(env.DB as unknown as QueryDb, { ...query, page: 1, per: 50 });
+          const feed = buildFeed(result.items, {
+            siteUrl: url.origin,
+            variant: query.variant ?? "br",
+            kind: query.kind,
+          });
+          return asset(feed, "application/rss+xml; charset=utf-8");
         });
-        return asset(feed, "application/rss+xml; charset=utf-8");
       }
 
       // ------------------------------------------------ ponte de ingestão
