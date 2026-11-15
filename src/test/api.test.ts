@@ -9,7 +9,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { catalogStats, escapeLike, listTorrents, parseListQuery } from "../api.ts";
+import { catalogStats, escapeLike, listSeries, listTorrents, parseListQuery } from "../api.ts";
 import { FakeD1 } from "./fake-d1.ts";
 
 interface Row {
@@ -26,6 +26,8 @@ interface Row {
   langs?: string | null;
   evidence?: string;
   confidence?: number;
+  seriesKey?: string | null;
+  episode?: number | null;
 }
 
 const NOW = "2026-11-15T12:00:00.000Z";
@@ -35,19 +37,20 @@ function insert(db: FakeD1, row: Row): void {
   db.db
     .prepare(
       `INSERT INTO torrents
-         (id, title, title_clean, group_name, season, episode, resolution, size_bytes,
+         (id, title, title_clean, group_name, series_key, season, episode, resolution, size_bytes,
           seeders, leechers, downloads, published_at, first_seen_at, last_seen_at,
           pt_kind, pt_variant, status, confidence, evidence, needs_verification,
           verified_at, verify_version, description_langs, hidden)
-       VALUES (?,?,?,?,?,?,?,?,?,0,0,?,?,?,?,?,?,?,?,0,?,3,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,0,0,?,?,?,?,?,?,?,?,0,?,3,?,?)`,
     )
     .run(
       row.id,
       row.title ?? `Anime ${row.id}`,
       row.series ?? `Anime ${row.id}`,
       "Grupo",
+      row.seriesKey === undefined ? `anime-${row.id}` : row.seriesKey,
       1,
-      row.id % 12 || 1,
+      row.episode === undefined ? row.id % 12 || 1 : row.episode,
       "1080p",
       row.size ?? 1_500_000_000,
       row.seeders ?? 3,
@@ -289,5 +292,110 @@ test("catálogo vazio não quebra stats nem lista", async () => {
     assert.deepEqual(res.items, []);
     assert.equal(res.total, 0);
     assert.equal(res.pages, 1);
+
+    const series = await listSeries(db, parseListQuery(query({ variant: "br" })));
+    assert.deepEqual(series.items, []);
+    assert.equal(series.total, 0);
+    assert.equal(series.pages, 1);
+  });
+});
+
+// ------------------------------------------------------------------ séries
+
+/** Catálogo mínimo: duas séries, uma sem chave e uma com chave vazia. */
+function seedSeries(db: FakeD1): void {
+  insert(db, { id: 70, series: "Frieren", seriesKey: "frieren", episode: 1, kind: "sub", variant: "br", published: "2026-11-12T00:00:00.000Z", seeders: 10 });
+  insert(db, { id: 71, series: "Frieren", seriesKey: "frieren", episode: 2, kind: "sub", variant: "br", published: "2026-11-13T00:00:00.000Z", seeders: 20 });
+  insert(db, { id: 72, series: "Frieren", seriesKey: "frieren", episode: 3, kind: "dub", variant: "br_pt", published: "2026-11-14T00:00:00.000Z", seeders: 30 });
+  insert(db, { id: 73, series: "Dandadan", seriesKey: "dandadan", kind: "sub", variant: "pt", published: "2026-11-09T00:00:00.000Z", seeders: 100 });
+  insert(db, { id: 74, series: "Dandadan", seriesKey: "dandadan", kind: "sub", variant: "pt", published: "2026-11-10T00:00:00.000Z", seeders: 1 });
+  insert(db, { id: 75, series: "Sem Chave", seriesKey: null });
+  insert(db, { id: 76, series: "Chave Vazia", seriesKey: "" });
+  insert(db, { id: 77, series: "Fantasma", seriesKey: "fantasma", variant: "unknown" });
+}
+
+test("agrupa por série com contagem, tipos, variantes e faixa de episódios", async () => {
+  await withDb(async (db) => {
+    seedSeries(db);
+
+    const res = await listSeries(db, parseListQuery(query({ variant: "br" })));
+    assert.equal(res.total, 1, "só a série que tem item na aba PT-BR");
+    const frieren = res.items[0];
+    assert.equal(frieren.key, "frieren");
+    assert.equal(frieren.title, "Frieren");
+    assert.equal(frieren.count, 3);
+    assert.equal(frieren.seeders, 60);
+    assert.equal(frieren.verifiedCount, 3);
+    assert.deepEqual(frieren.kinds.sort(), ["dub", "sub"]);
+    assert.deepEqual(frieren.variants.sort(), ["br", "br_pt"]);
+    assert.equal(frieren.firstEpisode, 1);
+    assert.equal(frieren.lastEpisode, 3);
+    assert.equal(frieren.latestPublishedAt, "2026-11-14T00:00:00.000Z");
+    assert.equal(frieren.maxSizeBytes, 1_500_000_000);
+  });
+});
+
+test("série sem chave, com chave vazia ou fora do filtro não aparece", async () => {
+  await withDb(async (db) => {
+    seedSeries(db);
+
+    const opt = await listSeries(db, parseListQuery(query({}))); // sem variante
+    const keys = opt.items.map((s) => s.key).sort();
+    assert.deepEqual(keys, ["dandadan", "frieren"]);
+    assert.ok(!keys.includes("fantasma"), "variante unknown não entra");
+  });
+});
+
+test("agrupamento respeita tipo e busca", async () => {
+  await withDb(async (db) => {
+    seedSeries(db);
+
+    const dub = await listSeries(db, parseListQuery(query({ variant: "br", kind: "dub" })));
+    assert.equal(dub.total, 1);
+    assert.equal(dub.items[0].count, 1, "só o item dublado da série");
+    assert.deepEqual(dub.items[0].kinds, ["dub"]);
+
+    const byName = await listSeries(db, parseListQuery(query({ q: "danda" })));
+    assert.deepEqual(byName.items.map((s) => s.key), ["dandadan"]);
+
+    const byGroup = await listSeries(db, parseListQuery(query({ q: "grupo" })));
+    assert.equal(byGroup.total, 2, "a busca também considera o grupo");
+  });
+});
+
+test("agrupamento pagina e ordena por recentes e seeders", async () => {
+  await withDb(async (db) => {
+    seedSeries(db);
+
+    const recent = await listSeries(db, parseListQuery(query({})));
+    assert.deepEqual(recent.items.map((s) => s.key), ["frieren", "dandadan"]);
+
+    const seeders = await listSeries(db, parseListQuery(query({ sort: "seeders" })));
+    assert.deepEqual(seeders.items.map((s) => s.key), ["dandadan", "frieren"]);
+
+    const page1 = await listSeries(db, parseListQuery(query({ per: "1", page: "1" })));
+    const page2 = await listSeries(db, parseListQuery(query({ per: "1", page: "2" })));
+    assert.equal(page1.total, 2);
+    assert.equal(page1.pages, 2);
+    assert.deepEqual(page1.items.map((s) => s.key), ["frieren"]);
+    assert.deepEqual(page2.items.map((s) => s.key), ["dandadan"]);
+
+    const beyond = await listSeries(db, parseListQuery(query({ per: "1", page: "9" })));
+    assert.deepEqual(beyond.items, []);
+    assert.equal(beyond.total, 2);
+  });
+});
+
+test("filtro series mostra só os itens daquela série", async () => {
+  await withDb(async (db) => {
+    seedSeries(db);
+
+    const only = await listTorrents(db, parseListQuery(query({ variant: "br", series: "frieren" })));
+    assert.deepEqual(only.items.map((i) => i.id).sort(), [70, 71, 72]);
+    assert.equal(only.total, 3);
+
+    const missing = await listTorrents(db, parseListQuery(query({ variant: "br", series: "nao-existe" })));
+    assert.deepEqual(missing.items, []);
+    assert.equal(missing.total, 0);
   });
 });

@@ -29,7 +29,7 @@ import {
   type Env as IngestEnv,
 } from "./ingest.ts";
 import { dispatchCollection, type DispatchEnv } from "./dispatch.ts";
-import { catalogStats, listTorrents, parseListQuery, type QueryDb } from "./api.ts";
+import { catalogStats, listSeries, listTorrents, parseListQuery, type QueryDb } from "./api.ts";
 import { buildFeed } from "./feed.ts";
 import { APP_JS, ABOUT_HTML, PAGE_HTML, STYLE_CSS } from "./web.ts";
 
@@ -118,7 +118,8 @@ export default {
           service: "miaau",
           version: 1,
           routes: [
-            "/api/torrents?variant=br|pt&kind=all|dub|sub&sort=recent|seeders|confidence|size&q=&page=1",
+            "/api/torrents?variant=br|pt&kind=all|dub|sub&sort=recent|seeders|confidence|size&q=&series=&page=1",
+            "/api/series?variant=br|pt&kind=all|dub|sub&sort=recent|seeders|confidence|size&q=&page=1",
             "/api/stats",
             "/feed.xml?variant=br|pt&kind=all|dub|sub",
             "/diag",
@@ -135,6 +136,13 @@ export default {
         if (!env.DB) return json({ error: "binding DB ausente no wrangler.toml" }, 503);
         const query = parseListQuery(url);
         const result = await listTorrents(env.DB as unknown as QueryDb, query);
+        return json(result, 200, { "cache-control": "public, max-age=120" });
+      }
+
+      if (route === "/api/series") {
+        if (!env.DB) return json({ error: "binding DB ausente no wrangler.toml" }, 503);
+        const query = parseListQuery(url);
+        const result = await listSeries(env.DB as unknown as QueryDb, query);
         return json(result, 200, { "cache-control": "public, max-age=120" });
       }
 

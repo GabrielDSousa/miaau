@@ -31,6 +31,8 @@ export interface ListQuery {
   kind: "all" | "dub" | "sub";
   sort: "recent" | "seeders" | "confidence" | "size";
   q: string;
+  /** Chave normalizada de série; quando presente, a lista mostra só ela. */
+  series?: string;
   page: number;
   per: number;
 }
@@ -70,12 +72,14 @@ export function parseListQuery(url: URL): ListQuery {
   const rawPage = Number(url.searchParams.get("page") ?? 1);
   const rawPer = Number(url.searchParams.get("per") ?? DEFAULT_PER);
   const q = (url.searchParams.get("q") ?? "").trim().slice(0, MAX_Q);
+  const series = (url.searchParams.get("series") ?? "").trim().slice(0, 200);
 
   return {
     variant: isVariant(rawVariant) ? rawVariant : undefined,
     kind: isKind(rawKind) ? rawKind : "all",
     sort: isSort(rawSort) ? rawSort : "recent",
     q,
+    series: series || undefined,
     page: Number.isFinite(rawPage) && rawPage >= 1 ? Math.min(Math.floor(rawPage), 1000) : 1,
     per: Number.isFinite(rawPer) && rawPer >= 1 ? Math.min(Math.floor(rawPer), MAX_PER) : DEFAULT_PER,
   };
@@ -132,6 +136,11 @@ function buildWhere(query: ListQuery): Where {
       `(title LIKE ? ESCAPE '\\' OR title_clean LIKE ? ESCAPE '\\' OR group_name LIKE ? ESCAPE '\\')`,
     );
     params.push(like, like, like);
+  }
+
+  if (query.series) {
+    clauses.push("series_key = ?");
+    params.push(query.series);
   }
 
   return { sql: clauses.join(" AND "), params };
@@ -213,6 +222,108 @@ export async function listTorrents(db: QueryDb, query: ListQuery): Promise<ListR
 
   return {
     items: (rows.results ?? []).map(toItem),
+    page: query.page,
+    per: query.per,
+    total,
+    pages: Math.max(1, Math.ceil(total / query.per)),
+  };
+}
+
+export interface SeriesListItem {
+  key: string;
+  title: string;
+  count: number;
+  latestPublishedAt: string | null;
+  seeders: number;
+  maxSizeBytes: number | null;
+  confidence: number;
+  verifiedCount: number;
+  kinds: string[];
+  variants: string[];
+  firstEpisode: number | null;
+  lastEpisode: number | null;
+}
+
+export interface SeriesResult {
+  items: SeriesListItem[];
+  page: number;
+  per: number;
+  total: number;
+  pages: number;
+}
+
+const SERIES_ORDER: Record<ListQuery["sort"], string> = {
+  recent: "latest DESC, key ASC",
+  seeders: "seeders DESC, latest DESC, key ASC",
+  confidence: "confidence DESC, latest DESC, key ASC",
+  size: "max_size DESC, latest DESC, key ASC",
+};
+
+function parseList(raw: unknown): string[] {
+  if (typeof raw !== "string" || !raw) return [];
+  return [...new Set(raw.split(",").filter(Boolean))];
+}
+
+function toSeries(row: Record<string, unknown>): SeriesListItem {
+  return {
+    key: String(row.key ?? ""),
+    title: String(row.title ?? row.key ?? ""),
+    count: Number(row.n ?? 0),
+    latestPublishedAt: row.latest ? String(row.latest) : null,
+    seeders: Number(row.seeders ?? 0),
+    maxSizeBytes: row.max_size === null || row.max_size === undefined ? null : Number(row.max_size),
+    confidence: Number(row.confidence ?? 0),
+    verifiedCount: Number(row.verified ?? 0),
+    kinds: parseList(row.kinds),
+    variants: parseList(row.variants),
+    firstEpisode: row.first_episode === null || row.first_episode === undefined ? null : Number(row.first_episode),
+    lastEpisode: row.last_episode === null || row.last_episode === undefined ? null : Number(row.last_episode),
+  };
+}
+
+/**
+ * Agrupa o catálogo por série.
+ *
+ * O item continua sendo a unidade de verdade; a série é uma lente sobre os
+ * itens já filtrados. Por isso `count` é o número de itens que passam no filtro
+ * atual, não o total histórico da série.
+ */
+export async function listSeries(db: QueryDb, query: ListQuery): Promise<SeriesResult> {
+  const where = buildWhere(query);
+  const offset = (query.page - 1) * query.per;
+  const grouped = `${where.sql} AND series_key IS NOT NULL AND series_key <> ''`;
+
+  const countRows = (await db
+    .prepare(`SELECT COUNT(DISTINCT series_key) AS n FROM torrents WHERE ${grouped}`)
+    .bind(...where.params)
+    .all()) as { results?: Array<{ n: number }> };
+  const total = Number(countRows.results?.[0]?.n ?? 0);
+
+  const rows = (await db
+    .prepare(
+      `SELECT series_key AS key,
+              MAX(title_clean) AS title,
+              COUNT(*) AS n,
+              MAX(published_at) AS latest,
+              SUM(seeders) AS seeders,
+              MAX(size_bytes) AS max_size,
+              MAX(confidence) AS confidence,
+              SUM(CASE WHEN verified_at IS NOT NULL THEN 1 ELSE 0 END) AS verified,
+              GROUP_CONCAT(DISTINCT pt_kind) AS kinds,
+              GROUP_CONCAT(DISTINCT pt_variant) AS variants,
+              MIN(episode) AS first_episode,
+              MAX(episode) AS last_episode
+         FROM torrents
+        WHERE ${grouped}
+        GROUP BY series_key
+        ORDER BY ${SERIES_ORDER[query.sort]}
+        LIMIT ? OFFSET ?`,
+    )
+    .bind(...where.params, query.per, offset)
+    .all()) as { results?: Array<Record<string, unknown>> };
+
+  return {
+    items: (rows.results ?? []).map(toSeries),
     page: query.page,
     per: query.per,
     total,

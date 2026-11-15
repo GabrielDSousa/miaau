@@ -44,6 +44,11 @@ export const PAGE_HTML = `<!doctype html>
       <button type="button" data-kind="sub" aria-pressed="false">Legendado</button>
     </div>
 
+    <div class="views" role="group" aria-label="Modo de exibição">
+      <button type="button" data-view="items" aria-pressed="true">Títulos</button>
+      <button type="button" data-view="series" aria-pressed="false">Séries</button>
+    </div>
+
     <label class="search">
       <span class="sr">Buscar por título</span>
       <input id="q" type="search" placeholder="Buscar série, filme, grupo…" autocomplete="off" spellcheck="false">
@@ -61,6 +66,12 @@ export const PAGE_HTML = `<!doctype html>
   </section>
 
   <p id="status" class="status" role="status" aria-live="polite"></p>
+
+  <p id="series-bar" class="series-bar" hidden>
+    <span>Série: <strong id="series-name"></strong></span>
+    <button type="button" id="series-clear">ver todas</button>
+  </p>
+
   <ul id="list" class="list"></ul>
   <p class="more"><button type="button" id="more" hidden>Carregar mais</button></p>
 </main>
@@ -193,7 +204,7 @@ a:hover { text-decoration: underline; }
   border-bottom: 1px solid var(--line-soft);
 }
 
-.tabs, .kinds { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.tabs, .kinds, .views { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
 
 button {
   font: inherit;
@@ -240,6 +251,29 @@ button[aria-pressed="true"]:hover { color: #16180f; background: var(--accent); }
 .status { color: var(--ink-faint); font-size: 0.88rem; min-height: 1.4em; margin: 1rem 0 0; }
 .status.error { color: #e0837a; }
 
+.series-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.85rem;
+  margin: 0.9rem 0 0;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--accent-soft);
+  border-radius: 0.5rem;
+  background: #17140d;
+  color: var(--ink-dim);
+  font-size: 0.88rem;
+}
+.series-bar[hidden] { display: none; }
+.series-bar strong { color: var(--ink); font-weight: 600; }
+.series-bar button { border: 1px solid var(--line); border-radius: 0.4rem; padding: 0.2rem 0.6rem; font-size: 0.8rem; }
+
+.series-count { color: var(--accent); font-variant-numeric: tabular-nums; }
+
+.series-actions { margin-top: 0.7rem; }
+.series-actions button { border: 1px solid var(--line); border-radius: 0.5rem; padding: 0.35rem 0.75rem; font-size: 0.85rem; }
+.series-actions button:hover { border-color: var(--accent); color: var(--ink); }
+
 .list { list-style: none; margin: 0.75rem 0 0; padding: 0; display: grid; gap: 0.65rem; }
 
 .card {
@@ -256,6 +290,17 @@ button[aria-pressed="true"]:hover { color: #16180f; background: var(--accent); }
 .card-title { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.35; }
 .card-title a { color: var(--ink); }
 .card-title a:hover { color: var(--accent); text-decoration: none; }
+.card-title button {
+  font: inherit;
+  font-weight: inherit;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.card-title button:hover { color: var(--accent); background: none; }
 
 .ep { color: var(--accent); font-variant-numeric: tabular-nums; }
 
@@ -321,12 +366,15 @@ button[aria-pressed="true"]:hover { color: #16180f; background: var(--accent); }
 export const APP_JS = String.raw`(function () {
   "use strict";
 
-  var state = { variant: "br", kind: "all", sort: "recent", q: "", page: 1, pages: 1 };
+  var state = { variant: "br", kind: "all", sort: "recent", q: "", view: "items", series: "", page: 1, pages: 1 };
   var list = document.getElementById("list");
   var status = document.getElementById("status");
   var more = document.getElementById("more");
   var search = document.getElementById("q");
   var sort = document.getElementById("sort");
+  var seriesBar = document.getElementById("series-bar");
+  var seriesName = document.getElementById("series-name");
+  var seriesClear = document.getElementById("series-clear");
   var seq = 0;
 
   function el(tag, cls, text) {
@@ -443,6 +491,72 @@ export const APP_JS = String.raw`(function () {
     return li;
   }
 
+  function episodeRange(s) {
+    if (s.firstEpisode === null || s.firstEpisode === undefined) return null;
+    var first = "E" + String(s.firstEpisode).padStart(2, "0");
+    if (s.lastEpisode === null || s.lastEpisode === s.firstEpisode) return first;
+    return first + "–E" + String(s.lastEpisode).padStart(2, "0");
+  }
+
+  function seriesCard(s) {
+    var li = el("li", "card series");
+    var head = el("div", "card-head");
+    var title = el("h2", "card-title");
+    var name = el("button", null, s.title || s.key);
+    name.type = "button";
+    name.title = "ver os títulos desta série";
+    name.addEventListener("click", function () { openSeries(s.key, s.title || s.key); });
+    title.appendChild(name);
+    head.appendChild(title);
+    li.appendChild(head);
+
+    var meta = el("p", "meta");
+    var bits = [
+      s.count + (s.count === 1 ? " título" : " títulos"),
+      episodeRange(s),
+      s.latestPublishedAt ? fmtDate(s.latestPublishedAt) : null,
+      s.seeders > 0 ? s.seeders + " seeders" : null,
+      fmtSize(s.maxSizeBytes)
+    ];
+    for (var i = 0; i < bits.length; i++) {
+      if (!bits[i]) continue;
+      if (meta.childNodes.length) meta.appendChild(el("span", "sep"));
+      meta.appendChild(el("span", null, String(bits[i])));
+    }
+    li.appendChild(meta);
+
+    var badges = el("div", "badges");
+    for (var k = 0; k < s.kinds.length; k++) badges.appendChild(el("span", "badge kind", kindLabel(s.kinds[k])));
+    for (var v = 0; v < s.variants.length; v++) badges.appendChild(el("span", "badge", variantLabel(s.variants[v], "")));
+    if (s.verifiedCount > 0) {
+      badges.appendChild(el("span", "badge verified", s.verifiedCount === s.count ? "verificado" : s.verifiedCount + " verificados"));
+    }
+    li.appendChild(badges);
+
+    var actions = el("p", "series-actions");
+    var open = el("button", null, "ver episódios");
+    open.type = "button";
+    open.addEventListener("click", function () { openSeries(s.key, s.title || s.key); });
+    actions.appendChild(open);
+    li.appendChild(actions);
+
+    return li;
+  }
+
+  function showSeries(title) {
+    seriesBar.hidden = !state.series;
+    seriesName.textContent = title || state.series;
+  }
+
+  function openSeries(key, title) {
+    state.series = key || "";
+    state.view = "items";
+    state.page = 1;
+    syncPressed("[data-view]", "data-view", state.view);
+    showSeries(title || key);
+    load(1, false);
+  }
+
   function params(page) {
     var qs = new URLSearchParams();
     qs.set("variant", state.variant);
@@ -450,7 +564,12 @@ export const APP_JS = String.raw`(function () {
     qs.set("sort", state.sort);
     qs.set("page", String(page));
     if (state.q) qs.set("q", state.q);
+    if (state.series) qs.set("series", state.series);
     return qs.toString();
+  }
+
+  function grouped() {
+    return state.view === "series" && !state.series;
   }
 
   function load(page, append) {
@@ -462,7 +581,8 @@ export const APP_JS = String.raw`(function () {
     }
     more.disabled = true;
 
-    fetch("/api/torrents?" + params(page), { headers: { accept: "application/json" } })
+    var endpoint = grouped() ? "/api/series?" : "/api/torrents?";
+    fetch(endpoint + params(page), { headers: { accept: "application/json" } })
       .then(function (res) {
         if (!res.ok) throw new Error("HTTP " + res.status);
         return res.json();
@@ -471,16 +591,27 @@ export const APP_JS = String.raw`(function () {
         if (mine !== seq) return;
         state.page = data.page;
         state.pages = data.pages;
+        var grouping = grouped();
 
         if (!append) list.textContent = "";
-        for (var i = 0; i < data.items.length; i++) list.appendChild(card(data.items[i]));
+        for (var i = 0; i < data.items.length; i++) {
+          list.appendChild(grouping ? seriesCard(data.items[i]) : card(data.items[i]));
+        }
 
         if (!data.total) {
-          status.textContent = state.q
-            ? "Nada encontrado para \"" + state.q + "\"."
-            : "Ainda não há títulos confirmados nesta aba.";
+          if (state.q) {
+            status.textContent = "Nada encontrado para \"" + state.q + "\".";
+          } else if (grouping) {
+            status.textContent = "Ainda não há séries confirmadas nesta aba.";
+          } else {
+            status.textContent = "Ainda não há títulos confirmados nesta aba.";
+          }
         } else if (!append) {
-          status.textContent = data.total + (data.total === 1 ? " título" : " títulos");
+          if (grouping) {
+            status.textContent = data.total + (data.total === 1 ? " série" : " séries");
+          } else {
+            status.textContent = data.total + (data.total === 1 ? " título" : " títulos");
+          }
         }
 
         more.hidden = state.page >= state.pages;
@@ -514,10 +645,16 @@ export const APP_JS = String.raw`(function () {
     }
   }
 
+  function resetSeries() {
+    state.series = "";
+    showSeries("");
+  }
+
   document.querySelectorAll("[data-variant]").forEach(function (btn) {
     btn.addEventListener("click", function () {
       state.variant = btn.getAttribute("data-variant");
       state.page = 1;
+      resetSeries();
       syncPressed("[data-variant]", "data-variant", state.variant);
       load(1, false);
     });
@@ -530,6 +667,22 @@ export const APP_JS = String.raw`(function () {
       syncPressed("[data-kind]", "data-kind", state.kind);
       load(1, false);
     });
+  });
+
+  document.querySelectorAll("[data-view]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      state.view = btn.getAttribute("data-view");
+      state.page = 1;
+      if (state.view === "series") resetSeries();
+      syncPressed("[data-view]", "data-view", state.view);
+      load(1, false);
+    });
+  });
+
+  seriesClear.addEventListener("click", function () {
+    resetSeries();
+    state.page = 1;
+    load(1, false);
   });
 
   var timer = null;
