@@ -32,6 +32,7 @@
 | Como funciona | ✅ funcionando | fontes, classificação, limites e canal de correção |
 | Busca e filtros | ✅ funcionando | abas PT-BR/PT-PT, dublado/legendado, busca por título ou grupo e ordenação |
 | Visão por série | ✅ funcionando | agrupa os títulos por série, com contagem, faixa de episódios e atalho para os itens |
+| Correção por item | ✅ funcionando | cada card tem um link que abre uma issue já preenchida com o torrent |
 | Feed RSS | ✅ funcionando | 50 itens mais recentes, por variante e tipo |
 | Histórico (backfill) | ✅ inicial | 8 termos de busca, até 1.000 resultados cada; não é o arquivo completo |
 
@@ -73,6 +74,7 @@ conteúdo adulto.
 - backfill do histórico por busca HTML, com fila de verificação incremental;
 - site público com abas PT-BR/PT-PT, filtro por dublado/legendado e busca;
 - visão por série, agrupando episódios e lotes do mesmo anime;
+- selo de novidade e link de correção em cada card;
 - feed RSS por variante e tipo, além da API JSON.
 
 ## Ferramentas utilizadas

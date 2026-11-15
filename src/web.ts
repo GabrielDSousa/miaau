@@ -328,6 +328,11 @@ button[aria-pressed="true"]:hover { color: #16180f; background: var(--accent); }
 .badge.verified { color: var(--good); border-color: #26301f; }
 .badge.lang { text-transform: none; letter-spacing: 0; color: var(--ink-faint); }
 .badge.conf { text-transform: none; letter-spacing: 0; }
+.badge.new { color: #16180f; background: var(--accent); border-color: var(--accent); }
+
+.card-foot { margin: 0.55rem 0 0; font-size: 0.78rem; }
+.report { color: var(--ink-faint); }
+.report:hover { color: var(--accent); }
 
 .why { margin-top: 0.55rem; font-size: 0.8rem; color: var(--ink-faint); }
 .why summary { cursor: pointer; width: fit-content; }
@@ -400,6 +405,28 @@ export const APP_JS = String.raw`(function () {
     return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
   }
 
+  function isNew(iso) {
+    if (!iso) return false;
+    var t = new Date(iso).getTime();
+    if (isNaN(t)) return false;
+    // 3 dias: o suficiente para "saiu agora" sem marcar o catálogo inteiro.
+    return Date.now() - t < 3 * 24 * 60 * 60 * 1000;
+  }
+
+  function reportUrl(item) {
+    var body = [
+      "Torrent: https://nyaa.si/view/" + item.id,
+      "Título: " + item.title,
+      "Classificação atual: " + kindLabel(item.kind) + " · " + variantLabel(item.variant, "?") + " (" + Math.round((item.confidence || 0) * 100) + "% de confiança)",
+      "",
+      "O que está errado:",
+      "",
+    ].join("\n");
+    return "https://github.com/GabrielDSousa/miaau/issues/new?title=" +
+      encodeURIComponent("Classificação errada: " + (item.series || item.title)) +
+      "&body=" + encodeURIComponent(body);
+  }
+
   function kindLabel(kind) {
     if (kind === "dub") return "dublado";
     if (kind === "sub") return "legendado";
@@ -463,6 +490,7 @@ export const APP_JS = String.raw`(function () {
     badges.appendChild(el("span", "badge kind", kindLabel(item.kind)));
     badges.appendChild(el("span", "badge", variantLabel(item.variant, state.variant === "br" ? "PT-BR" : "PT-PT")));
     badges.appendChild(el("span", "badge conf", Math.round((item.confidence || 0) * 100) + "% de confiança"));
+    if (isNew(item.publishedAt)) badges.appendChild(el("span", "badge new", "novo"));
     if (item.verified) badges.appendChild(el("span", "badge verified", "verificado"));
 
     var unknown = [];
@@ -487,6 +515,14 @@ export const APP_JS = String.raw`(function () {
       why.appendChild(ul);
       li.appendChild(why);
     }
+
+    var foot = el("p", "card-foot");
+    var report = el("a", "report", "reportar erro");
+    report.href = reportUrl(item);
+    report.target = "_blank";
+    report.rel = "noopener noreferrer nofollow";
+    foot.appendChild(report);
+    li.appendChild(foot);
 
     return li;
   }
