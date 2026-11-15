@@ -201,14 +201,32 @@ function extractSeries(body: string): string {
   return s;
 }
 
+/**
+ * Marcadores que às vezes sobram no fim do nome da série.
+ *
+ * "Ao no Hako - Weekly" e "King's Raid - Hardsub" são o mesmo anime que
+ * "Ao no Hako" e "King's Raid"; sem essa limpeza a visão por série parte o
+ * catálogo em grupos de um item só.
+ */
+const NOISE_SUFFIX =
+  /-(?:hardsub|softsub|weekly|uncensored|unc|repack|batch|completo|complete|multi|dual|dub|sub|legendado|dublado|portugues|portuguese)$/;
+
 /** Chave normalizada para agrupar episódios da mesma série. */
 export function normalizeKey(text: string): string {
-  return text
+  let key = text
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/&/g, " and ")
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 120);
+    .replace(/^-+|-+$/g, "");
+
+  // No máximo três remoções: "anime-hardsub-weekly" também é "anime".
+  for (let i = 0; i < 3; i++) {
+    const next = key.replace(NOISE_SUFFIX, "");
+    if (next === key || next.length < 2) break;
+    key = next;
+  }
+
+  return key.slice(0, 120);
 }

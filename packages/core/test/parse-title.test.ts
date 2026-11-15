@@ -61,3 +61,16 @@ test("código de áudio", () => {
 test("música/OST é reconhecido", () => {
   assert.equal(parseTitle("[Puto] Sakura Card Captors OP3 Abertura Dublada em Portugues").kind, "music");
 });
+
+test("chave de série junta o mesmo anime com marcadores diferentes", () => {
+  const base = parseTitle("[Judas] Ao no Hako (Blue Box) - S02E06 [1080p]").seriesKey;
+  const weekly = parseTitle("[Judas] Ao no Hako (Blue Box) - S02E07 [1080p] (Weekly)").seriesKey;
+  assert.equal(weekly, base);
+
+  const hardsub = parseTitle("[Grupo] King's Raid - 13 [Hardsub][PT-BR]").seriesKey;
+  const plain = parseTitle("[Grupo] King's Raid - 14 [PT-BR]").seriesKey;
+  assert.equal(hardsub, plain);
+
+  // Não colapsa a chave a ponto de perder o nome da série.
+  assert.equal(parseTitle("[G] Weekly - 01 [PT-BR]").seriesKey, "weekly");
+});
