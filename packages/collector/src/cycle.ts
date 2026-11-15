@@ -92,7 +92,8 @@ export async function runCycle(opts: CycleOptions): Promise<CycleResult> {
   const { remote, fetcher, now } = opts;
   const log = opts.log ?? (() => {});
   const category = opts.category ?? "1_0";
-  const queueLimit = Math.max(0, opts.queueLimit ?? 10);
+  const rawQueueLimit = opts.queueLimit ?? 10;
+  const queueLimit = Number.isFinite(rawQueueLimit) ? Math.max(0, Math.floor(rawQueueLimit)) : 10;
   const gapThreshold = opts.gapThreshold ?? 200;
 
   const started = now();

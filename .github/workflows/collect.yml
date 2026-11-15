@@ -56,10 +56,12 @@ jobs:
           # Combinado de coleta do projeto: contato identificável no UA.
           MIAU_CONTACT: gabrielramos.email@gmail.com
           NYAA_BASE: https://nyaa.si
+          # Entram como ambiente (nunca interpolados crus no shell).
+          TASK: ${{ inputs.task || 'cycle' }}
+          LIMIT: ${{ inputs.limit || 10 }}
         run: |
-          task="${{ inputs.task || 'cycle' }}"
-          if [ "$task" = "backfill" ]; then
-            node scripts/miaau.ts backfill --pages 14
-          else
-            node scripts/miaau.ts cycle --limit "${{ inputs.limit || 10 }}"
-          fi
+          case "$TASK" in
+            backfill) node scripts/miaau.ts backfill --pages 14 ;;
+            cycle) node scripts/miaau.ts cycle --limit "${LIMIT:-10}" ;;
+            *) echo "task inválida: $TASK"; exit 2 ;;
+          esac

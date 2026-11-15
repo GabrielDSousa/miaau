@@ -92,7 +92,10 @@ export async function runBackfill(opts: BackfillOptions): Promise<BackfillResult
   const { remote, fetcher, now } = opts;
   const log = opts.log ?? (() => {});
   const terms = opts.terms?.length ? opts.terms : BACKFILL_TERMS;
-  const maxPages = Math.min(Math.max(1, opts.maxPages ?? MAX_PAGES), MAX_PAGES);
+  const rawMaxPages = opts.maxPages ?? MAX_PAGES;
+  const maxPages = Number.isFinite(rawMaxPages)
+    ? Math.min(Math.max(1, Math.floor(rawMaxPages)), MAX_PAGES)
+    : MAX_PAGES;
   const ruleVersion = opts.ruleVersion;
 
   const result: BackfillResult = {

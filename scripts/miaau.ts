@@ -254,7 +254,8 @@ async function cycle(fetcher: Fetcher): Promise<void> {
   const remote = makeRemote("cycle");
   if (!remote) return;
 
-  const limit = Number(flag("limit") ?? 10);
+  const rawLimit = Number(flag("limit") ?? 10);
+  const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(100, Math.floor(rawLimit))) : 10;
 
   const t0 = Date.now();
   const r = await runCycle({
@@ -297,7 +298,8 @@ async function backfill(fetcher: Fetcher): Promise<void> {
     ?.split(",")
     .map((t) => t.trim())
     .filter(Boolean);
-  const maxPages = Number(flag("pages") ?? 14);
+  const maxPagesRaw = Number(flag("pages") ?? 14);
+  const maxPages = Number.isFinite(maxPagesRaw) ? Math.max(1, Math.floor(maxPagesRaw)) : 14;
 
   const t0 = Date.now();
   const r = await runBackfill({
